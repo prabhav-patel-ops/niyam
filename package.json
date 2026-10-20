@@ -1,0 +1,1 @@
+{"name":"niyam","private":true,"scripts":{"test":"node tests/ui.cjs"},"devDependencies":{"jsdom":"26.1.0"}}
