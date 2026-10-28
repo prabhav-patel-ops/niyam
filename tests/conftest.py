@@ -19,8 +19,7 @@ def client(tmp_path,monkeypatch):
     for kind in ["prices","benchmark","fundamentals"]:
         data.files_for(kind)
     data._cache.clear()
-    main.rate.clear()
-    for key in ['LLM_BASE_URL','LLM_MODEL','LLM_API_KEY','TAVILY_API_KEY','DAILY_FEED_URL','DAILY_FEED_API_KEY']:
+    for key in ['LLM_BASE_URL','LLM_MODEL','LLM_API_KEY','TAVILY_API_KEY','DAILY_FEED_URL','DAILY_FEED_API_KEY','NIYAM_PUBLIC_URL','NIYAM_ENV','NIYAM_PRICE_BASIS','NIYAM_REGISTRATION_OPEN']:
         monkeypatch.delenv(key,raising=False)
     from fastapi.testclient import TestClient
     with TestClient(main.app) as c:
@@ -31,4 +30,6 @@ def register(client,email='test@example.com'):
     response=client.post('/api/auth/signup',json={'name':'Test account','email':email,'password':'Test-only-password-123!'})
     assert response.status_code==200,response.text
     out=response.json()
+    # These fixtures exercise explicit Bearer requests; cookie flow has its own tests.
+    client.cookies.clear()
     return {'Authorization':'Bearer '+out['token']},out

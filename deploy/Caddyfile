@@ -1,0 +1,16 @@
+{$NIYAM_DOMAIN} {
+    encode zstd gzip
+    request_body {
+        max_size 9MB
+    }
+    reverse_proxy niyam:8000 {
+        transport http {
+            read_timeout 300s
+            write_timeout 30s
+        }
+    }
+    log {
+        output stdout
+        format json
+    }
+}

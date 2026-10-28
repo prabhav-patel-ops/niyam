@@ -53,6 +53,7 @@ def refresh():
                                 c.execute('INSERT OR IGNORE INTO alerts VALUES(?,?,?,?,?,?,?,?)',
                                     (store.new_id(),watch['user_id'],watch['id'],str(latest),trade['symbol'],'STOP_OBSERVED',store.dump(body),time.time()))
                     c.execute('UPDATE watches SET last_date=?,error=NULL WHERE id=?',(str(latest),watch['id']))
+                    c.execute('DELETE FROM alerts WHERE user_id=? AND id NOT IN (SELECT id FROM alerts WHERE user_id=? ORDER BY created DESC LIMIT 1000)',(watch['user_id'],watch['user_id']))
             except Exception as error:
                 with store.db() as c:
                     c.execute('UPDATE watches SET error=? WHERE id=?',(str(error) if isinstance(error,ValueError) else 'Signal evaluation failed; inspect data and retry.',watch['id']))

@@ -1,24 +1,20 @@
 from contextlib import asynccontextmanager
-from datetime import date
-from collections import defaultdict,deque
 from pathlib import Path
+from urllib.parse import urlsplit
 import hashlib
-import io
 import json
 import os
 import sqlite3
 import threading
 import time
-import zipfile
 from dotenv import load_dotenv
 
 ROOT=Path(__file__).resolve().parents[1]
 load_dotenv(ROOT/'.env')
 
-from fastapi import FastAPI,Depends,HTTPException,Request,UploadFile,File
-from fastapi.responses import JSONResponse,FileResponse
+from fastapi import FastAPI,Depends,HTTPException,Request,Response,UploadFile,File
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
@@ -27,59 +23,37 @@ from . import store,signals,jobs,feed
 from .models import Strategy,RunRequest,template
 from .data import catalog,load_dataset
 from .rules import describe
-from .assistant import connection_status,interpret,REFERENCES
+from .assistant import interpret,REFERENCES
+from . import runtime
+from .security import RequestPerimeter,instance_lock
 
 
 @asynccontextmanager
 async def lifespan(app):
-    store.init()
-    stop=threading.Event()
-    worker=threading.Thread(target=signals.loop,args=(stop,),daemon=True)
-    worker.start()
-    yield
-    stop.set()
-    worker.join(timeout=2)
+    runtime.validate_config()
+    with instance_lock():
+        store.init()
+        stop=threading.Event()
+        worker=threading.Thread(target=signals.loop,args=(stop,),daemon=True)
+        worker.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            worker.join(timeout=35)
+            jobs.drain()
 
 
-app=FastAPI(title='Niyam API',version='1.0.0',lifespan=lifespan,docs_url='/api/docs')
-origins=[x.strip() for x in os.getenv('NIYAM_ALLOWED_ORIGINS','http://localhost:8000,http://127.0.0.1:8000,https://whood-yop.github.io').split(',') if x.strip()]
-app.add_middleware(CORSMiddleware,allow_origins=origins,allow_credentials=False,allow_methods=['GET','POST','PUT','DELETE','OPTIONS'],allow_headers=['Authorization','Content-Type'])
-app.add_middleware(TrustedHostMiddleware,allowed_hosts=os.getenv('NIYAM_ALLOWED_HOSTS','localhost,127.0.0.1,testserver').split(','))
+app=FastAPI(title='Niyam API',version='1.1.0',lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)
+public_host=urlsplit(os.getenv('NIYAM_PUBLIC_URL','')).hostname
+app.add_middleware(TrustedHostMiddleware,allowed_hosts=[h.strip() for h in os.getenv('NIYAM_ALLOWED_HOSTS',','.join(['localhost','127.0.0.1','testserver']+([public_host] if public_host else []))).split(',') if h.strip()])
+app.add_middleware(RequestPerimeter)
 auth=HTTPBearer(auto_error=False)
-rate=defaultdict(deque)
-rate_lock=threading.Lock()
 
 
 def limit(key,max_count=30,seconds=60):
-    now=time.monotonic()
-    with rate_lock:
-        if len(rate)>10000:
-            for old in list(rate):
-                if not rate[old] or rate[old][-1]<now-3600:
-                    del rate[old]
-        q=rate[key]
-        while q and q[0]<now-seconds:
-            q.popleft()
-        if len(q)>=max_count:
-            raise HTTPException(429,'Please wait a minute before trying again.')
-        q.append(now)
-
-
-@app.middleware('http')
-async def safety_headers(request,call_next):
-    size=request.headers.get('content-length','0')
-    try:
-        if int(size)>9*1024*1024:
-            return JSONResponse({'detail':'The file is too large. Maximum size: 8 MB.'},status_code=413)
-    except ValueError:
-        return JSONResponse({'detail':'Invalid request size.'},status_code=400)
-    response=await call_next(request)
-    response.headers['X-Content-Type-Options']='nosniff'
-    response.headers['Referrer-Policy']='no-referrer'
-    response.headers['X-Frame-Options']='DENY'
-    if request.url.path.startswith('/api/'):
-        response.headers['Cache-Control']='no-store'
-    return response
+    if not store.allow_request(key,max_count,seconds):
+        raise HTTPException(429,'Please wait before trying again.',headers={'Retry-After':str(seconds)})
 
 
 @app.exception_handler(RequestValidationError)
@@ -88,14 +62,16 @@ async def friendly_validation(request,error):
     return JSONResponse({'detail':'Please check the highlighted fields.','fields':errors},status_code=422)
 
 
-def current_user(credentials:HTTPAuthorizationCredentials|None=Depends(auth)):
-    user=store.user_for(credentials.credentials) if credentials else None
+def current_user(request:Request,credentials:HTTPAuthorizationCredentials|None=Depends(auth)):
+    token=credentials.credentials if credentials else request.cookies.get('niyam_session')
+    user=store.user_for(token) if token else None
     if not user:
         raise HTTPException(401,'Sign in to save and run your strategies.')
     return dict(user)
 
 
 class Signup(BaseModel):
+    model_config=ConfigDict(str_strip_whitespace=False,extra='forbid')
     name:str=Field(min_length=1,max_length=60)
     email:EmailStr
     password:str=Field(min_length=12,max_length=256)
@@ -113,20 +89,33 @@ class Recovery(BaseModel):
 
 
 @app.post('/api/auth/signup')
-def signup(body:Signup,request:Request):
+def signup(body:Signup,request:Request,response:Response):
     limit('signup:'+request.client.host,5,600)
+    if os.getenv('NIYAM_REGISTRATION_OPEN','true').lower()!='true':
+        raise HTTPException(403,'New account registration is currently closed.')
+    if not body.name.strip():
+        raise HTTPException(422,'Please enter your name.')
     uid=store.new_id();recovery=store.new_id()+store.new_id()[:12]
     email=str(body.email).lower()
     try:
         with store.db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            if c.execute('SELECT COUNT(*) FROM users').fetchone()[0]>=1000:
+                raise HTTPException(503,'New accounts are temporarily unavailable.')
             c.execute('INSERT INTO users VALUES(?,?,?,?,?,?)',(uid,email,body.name.strip(),store.password_hash(body.password),time.time(),hashlib.sha256(recovery.encode()).hexdigest()))
     except sqlite3.IntegrityError:
         raise HTTPException(409,'This email is already registered. Sign in or use your recovery code.')
-    return {'user':{'id':uid,'email':email,'name':body.name.strip()},'token':store.session(uid),'recovery_code':recovery}
+    token=store.session(uid)
+    set_session_cookie(response,token)
+    return {'user':{'id':uid,'email':email,'name':body.name.strip()},'token':token,'recovery_code':recovery}
+
+
+def set_session_cookie(response,token):
+    response.set_cookie('niyam_session',token,max_age=12*3600,httponly=True,secure=runtime.production(),samesite='strict',path='/api')
 
 
 @app.post('/api/auth/login')
-def login(body:Login,request:Request):
+def login(body:Login,request:Request,response:Response):
     limit('login:'+request.client.host,15,60)
     limit('account:'+str(body.email).lower(),15,300)
     with store.db() as c:
@@ -135,14 +124,18 @@ def login(body:Login,request:Request):
         if not user:
             store.password_hash(body.password)
         raise HTTPException(401,'The email or password is incorrect.')
-    return {'token':store.session(user['id']),'user':{x:user[x] for x in ['id','email','name']}}
+    token=store.session(user['id'])
+    set_session_cookie(response,token)
+    return {'token':token,'user':{x:user[x] for x in ['id','email','name']}}
 
 
 @app.post('/api/auth/recover')
-def recover(body:Recovery,request:Request):
+def recover(body:Recovery,request:Request,response:Response):
     limit('recover:'+request.client.host,5,600)
+    limit('recovery-account:'+str(body.email).lower(),5,600)
     import hmac
     with store.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         user=c.execute('SELECT * FROM users WHERE email=?',(str(body.email).lower(),)).fetchone()
         actual=hashlib.sha256(body.recovery_code.encode()).hexdigest()
         if not user or not hmac.compare_digest(actual,user['recovery_hash']):
@@ -150,6 +143,7 @@ def recover(body:Recovery,request:Request):
         code=store.new_id()+store.new_id()[:12]
         c.execute('UPDATE users SET password=?,recovery_hash=? WHERE id=?',(store.password_hash(body.password),hashlib.sha256(code.encode()).hexdigest(),user['id']))
         c.execute('DELETE FROM sessions WHERE user_id=?',(user['id'],))
+    response.delete_cookie('niyam_session',path='/api')
     return {'recovery_code':code,'message':'Password reset. Save the new recovery code, then sign in.'}
 
 
@@ -158,19 +152,32 @@ def me(user=Depends(current_user)): return user
 
 
 @app.post('/api/auth/logout')
-def logout(credentials:HTTPAuthorizationCredentials=Depends(auth),user=Depends(current_user)):
+def logout(request:Request,response:Response,credentials:HTTPAuthorizationCredentials|None=Depends(auth),user=Depends(current_user)):
+    token=credentials.credentials if credentials else request.cookies.get('niyam_session','')
     with store.db() as c:
-        c.execute('DELETE FROM sessions WHERE token_hash=?',(hashlib.sha256(credentials.credentials.encode()).hexdigest(),))
+        c.execute('DELETE FROM sessions WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),))
+    response.delete_cookie('niyam_session',path='/api')
     return {'ok':True}
 
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','app':'niyam','version':'1.0.0','daily_only':True,'connections':connection_status(),'local_backend':True,'daily_feed':feed.status()}
+    return {'status':'ok','app':'niyam','version':'1.1.0','daily_only':True}
+
+
+@app.get('/api/runtime')
+def workspace_runtime():
+    return runtime.public_state()
+
+
+@app.get('/api/ready')
+def readiness():
+    state=runtime.public_state()
+    return JSONResponse(state,status_code=200 if state['ready'] else 503)
 
 
 @app.get('/api/data')
-def data_status(user=Depends(current_user)): return catalog()
+def data_status(user=Depends(current_user)): return runtime.user_catalog()
 
 
 @app.get('/api/templates')
@@ -185,7 +192,7 @@ def references(): return REFERENCES
 def validate(spec:Strategy,user=Depends(current_user)):
     return {'entry':describe(spec.entry),'exit':describe(spec.exit),'valid':True,
             'assumptions':['Daily long-only, next-open execution','Equal initial capital per selected stock','Nifty 50 price index benchmark'],
-            'data':catalog()}
+            'data':runtime.user_catalog()}
 
 
 class Prompt(BaseModel):
@@ -208,48 +215,32 @@ def parse_strategy(body:Prompt,user=Depends(current_user)):
     if sum(len(x['body']) for x in docs)>60000:
         raise HTTPException(422,'Attach shorter documents or only the relevant pages (60,000 extracted characters total).')
     try:
-        return interpret(body.text,docs,body.defaults,body.answers)
+        defaults={**body.defaults,'price_basis_confirmed':runtime.price_basis_confirmed()}
+        return interpret(body.text,docs,defaults,body.answers)
     except Exception:
-        raise HTTPException(503,'The AI provider did not respond successfully. Check its model, endpoint, credits and key in .env, then retry. Your draft is still here.')
+        raise HTTPException(503,'Strategy understanding is temporarily unavailable. Your draft is still here. Please try again shortly.')
 
 
 @app.post('/api/attachments')
-async def upload(file:UploadFile=File(...),user=Depends(current_user)):
+def upload(file:UploadFile=File(...),user=Depends(current_user)):
     limit('upload:'+user['id'],20,600)
-    content=await file.read(8*1024*1024+1)
-    await file.close()
+    content=file.file.read(8*1024*1024+1)
+    file.file.close()
     if len(content)>8*1024*1024:
         raise HTTPException(413,'Attach a document smaller than 8 MB.')
     name=Path(file.filename or 'document').name[:150]
     ext=Path(name).suffix.lower()
     try:
-        if ext=='.pdf':
-            from pypdf import PdfReader
-            pdf=PdfReader(io.BytesIO(content))
-            if pdf.is_encrypted or len(pdf.pages)>40:
-                raise ValueError('Use an unlocked PDF of at most 40 pages.')
-            text='\n'.join(f'[Page {i+1}] '+(p.extract_text() or '') for i,p in enumerate(pdf.pages))
-        elif ext=='.docx':
-            from docx import Document
-            with zipfile.ZipFile(io.BytesIO(content)) as archive:
-                if sum(x.file_size for x in archive.infolist())>30*1024*1024:
-                    raise ValueError('The expanded Word document is too large.')
-            doc=Document(io.BytesIO(content))
-            text='\n'.join([p.text for p in doc.paragraphs]+[' | '.join(c.text for c in row.cells) for table in doc.tables for row in table.rows])
-        elif ext in {'.txt','.md'}:
-            text=content.decode('utf-8-sig')
-        else:
-            raise ValueError('Please attach PDF, DOCX, TXT or Markdown.')
-        if len(text.strip())<30:
-            raise ValueError('No readable strategy text was found. Use a text-based PDF or paste the rules; scanned-image OCR is not enabled.')
-        if len(text)>60000:
-            raise ValueError('This document is too long. Attach only the relevant pages (60,000 characters maximum).')
+        from .documents import extract
+        text=extract(content,ext)
     except ValueError as error:
         raise HTTPException(422,str(error))
-    except Exception:
-        raise HTTPException(422,'This document could not be read. Try a text PDF, DOCX or plain text.')
     aid=store.new_id()
     with store.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        count,size=c.execute('SELECT COUNT(*),COALESCE(SUM(length(body)),0) FROM attachments WHERE user_id=?',(user['id'],)).fetchone()
+        if count>=50 or size+len(text)>1000000:
+            raise HTTPException(422,'Your document storage is full. Remove older attachments before uploading more.')
         c.execute('INSERT INTO attachments VALUES(?,?,?,?,?)',(aid,user['id'],name,text,time.time()))
     return {'id':aid,'name':name,'characters':len(text),'preview':text[:400]}
 
@@ -271,6 +262,7 @@ def list_strategies(user=Depends(current_user)):
 def save_strategy(spec:Strategy,user=Depends(current_user)):
     sid=store.new_id()
     with store.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         if c.execute('SELECT COUNT(*) FROM strategies WHERE user_id=?',(user['id'],)).fetchone()[0]>=200:
             raise HTTPException(422,'You have reached 200 saved strategies. Remove an older draft first.')
         c.execute('INSERT INTO strategies VALUES(?,?,?,?,?)',(sid,user['id'],spec.name,spec.model_dump_json(),time.time()))
@@ -287,22 +279,26 @@ def delete_strategy(sid:str,user=Depends(current_user)):
 @app.post('/api/jobs',status_code=202)
 def submit(body:RunRequest,user=Depends(current_user)):
     limit('job:'+user['id'],20,600)
+    body.strategy=runtime.prepare_strategy(body.strategy)
     if not body.strategy.symbols:
         raise HTTPException(422,'Choose at least one stock before starting.')
     if not body.strategy.price_basis_confirmed:
-        raise HTTPException(422,'Confirm the price adjustment basis in Data assumptions first.')
+        raise HTTPException(503,'The research service is being prepared. Please try again shortly.')
     status=catalog()
     if not status['ready']:
-        raise HTTPException(422,status['errors'][0] if status['errors'] else 'Add your prices and Nifty 50 benchmark data before running a backtest.')
+        raise HTTPException(503,'Market research is temporarily unavailable. Please try again shortly.')
     with jobs.SUBMIT_LOCK:
         with store.db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            if c.execute('SELECT COUNT(*) FROM jobs WHERE user_id=?',(user['id'],)).fetchone()[0]>=200:
+                raise HTTPException(422,'Your report storage is full. Remove an older report first.')
             if c.execute("SELECT COUNT(*) FROM jobs WHERE user_id=? AND state IN ('queued','running')",(user['id'],)).fetchone()[0]>=2:
                 raise HTTPException(429,'Two jobs are already active. Wait for one to finish or cancel it.')
             if c.execute("SELECT COUNT(*) FROM jobs WHERE state IN ('queued','running')").fetchone()[0]>=10:
                 raise HTTPException(429,'The research queue is full. Please try again shortly.')
             jid=store.new_id()
             c.execute('INSERT INTO jobs(id,user_id,state,request,created) VALUES(?,?,?,?,?)',(jid,user['id'],'queued',body.model_dump_json(),time.time()))
-        jobs.POOL.submit(jobs.execute,jid)
+        jobs.enqueue(jid)
     return {'id':jid}
 
 
@@ -331,6 +327,13 @@ def cancel_job(jid:str,user=Depends(current_user)):
     return {'ok':True}
 
 
+@app.delete('/api/jobs/{jid}')
+def delete_job(jid:str,user=Depends(current_user)):
+    with store.db() as c:
+        c.execute('DELETE FROM jobs WHERE id=? AND user_id=? AND state NOT IN (\'queued\',\'running\')',(jid,user['id']))
+    return {'ok':True}
+
+
 @app.get('/api/signals')
 def signal_list(user=Depends(current_user)):
     with store.db() as c:
@@ -341,12 +344,17 @@ def signal_list(user=Depends(current_user)):
 
 @app.post('/api/signals')
 def add_watch(spec:Strategy,user=Depends(current_user)):
+    limit('watch:'+user['id'],10,600)
+    spec=runtime.prepare_strategy(spec)
     if not spec.symbols or not spec.price_basis_confirmed:
-        raise HTTPException(422,'Choose your stocks and confirm price assumptions first.')
-    frames,benchmark,_=load_dataset()
+        raise HTTPException(422,'Select stocks from the available universe before creating a watch.')
+    try:
+        frames,benchmark,_=load_dataset()
+    except Exception:
+        raise HTTPException(503,'Market research is temporarily unavailable. Please try again shortly.')
     latest=signals.latest_closed_date(benchmark)
     if not latest:
-        raise HTTPException(422,'Import completed daily candles and Nifty 50 data first.')
+        raise HTTPException(503,'Daily research is being prepared. Please try again shortly.')
     try:
         adjusted=Strategy.model_validate({**spec.model_dump(mode='json'),'end':str(latest)})
         run=__import__('app.engine',fromlist=['run_backtest']).run_backtest
@@ -355,10 +363,11 @@ def add_watch(spec:Strategy,user=Depends(current_user)):
         raise HTTPException(422,str(e))
     wid=store.new_id()
     with store.db() as c:
+        c.execute('BEGIN IMMEDIATE')
         if c.execute('SELECT COUNT(*) FROM watches WHERE user_id=?',(user['id'],)).fetchone()[0]>=20:
             raise HTTPException(422,'Remove an older watch before adding another (20 per account).')
         c.execute('INSERT INTO watches(id,user_id,spec,active,last_date,created) VALUES(?,?,?,?,?,?)',(wid,user['id'],spec.model_dump_json(),1,str(latest),time.time()))
-    return {'id':wid,'baseline':str(latest),'message':'Watch created. It will evaluate newly completed daily bars while the backend is running.'}
+    return {'id':wid,'baseline':str(latest),'message':'Watch created. New paper signals will appear as completed daily data arrives.'}
 
 
 class Toggle(BaseModel): active:bool
@@ -384,10 +393,6 @@ def refresh_signals(user=Depends(current_user)):
     limit('signals:'+user['id'],3,60)
     signals.refresh()
     return signal_list(user)
-
-
-@app.get('/config-template')
-def config_template(): return FileResponse(ROOT/'.env.example',filename='.env.example',media_type='text/plain')
 
 
 app.mount('/',StaticFiles(directory=ROOT/'web',html=True),name='app')

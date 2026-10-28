@@ -7,6 +7,7 @@ import threading
 import duckdb
 import numpy as np
 import pandas as pd
+from .models import completed_through
 
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('NIYAM_DATA_DIR',ROOT/'data')).resolve()
@@ -73,6 +74,8 @@ def join_fundamentals(frame,fundamentals,symbol):
     fields=[x for x in ['roe','roce','pe','pb','ps'] if x in part]
     for x in fields:
         part[x]=pd.to_numeric(part[x],errors='raise')
+        if np.isinf(part[x]).any():
+            raise ValueError('Fundamentals cannot contain infinite values.')
     return pd.merge_asof(frame.reset_index().sort_values('date'),part[['usable_date']+fields].sort_values('usable_date'),
                          left_on='date',right_on='usable_date',direction='backward').drop(columns=['usable_date']).set_index('date')
 
@@ -108,10 +111,14 @@ def load_dataset():
             frames={s:join_fundamentals(df,f,s) for s,df in frames.items()}
         digest=hashlib.sha256()
         for path,_,_ in sig:
-            digest.update(Path(path).name.encode())
+            digest.update(str(Path(path).relative_to(DATA)).replace('\\','/').encode())
+            digest.update(b'\0')
             with open(path,'rb') as handle:
                 for block in iter(lambda:handle.read(1024*1024),b''):
                     digest.update(block)
+            digest.update(b'\0')
+        if signature()!=sig:
+            raise ValueError('The dataset changed during loading. Retry after the update finishes.')
         result=(frames,benchmark,digest.hexdigest())
         _cache.clear()
         _cache[sig]=result
@@ -121,11 +128,13 @@ def load_dataset():
 def catalog():
     try:
         frames,benchmark,version=load_dataset()
-        symbols=[{'symbol':s,'rows':len(df),'start':str(df.index[0].date()),'end':str(df.index[-1].date())} for s,df in frames.items()]
+        cutoff=pd.Timestamp(completed_through())
+        benchmark=benchmark.loc[:cutoff]
+        symbols=[{'symbol':s,'rows':len(df.loc[:cutoff]),'start':str(df.index[0].date()),'end':str(df.loc[:cutoff].index[-1].date())} for s,df in frames.items() if len(df.loc[:cutoff])>=3]
         return {'symbols':symbols,'rows':sum(x['rows'] for x in symbols),'benchmark_rows':len(benchmark),
                 'benchmark_start':str(benchmark.index[0].date()) if len(benchmark) else None,
                 'benchmark_end':str(benchmark.index[-1].date()) if len(benchmark) else None,
-                'version':version,'ready':bool(symbols and len(benchmark)),'errors':[],
+                'version':version,'ready':bool(symbols and len(benchmark)>=3),'errors':[],
                 'folders':{'prices':'data/prices/','benchmark':'data/benchmark/','fundamentals':'data/fundamentals/'}}
     except Exception as e:
         return {'symbols':[],'rows':0,'benchmark_rows':0,'ready':False,'errors':[str(e)],'folders':{'prices':'data/prices/','benchmark':'data/benchmark/','fundamentals':'data/fundamentals/'}}

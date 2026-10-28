@@ -1,21 +1,64 @@
-# Deployment
+# Operator deployment runbook
 
-## Public repository and GitHub Pages
+## Supported architecture
 
-The workflow `.github/workflows/pages.yml` copies only `web/` through `scripts/build_pages.py` and enables public-preview mode. Choose **Settings → Pages → Build and deployment → Source → GitHub Actions**. A successful run publishes https://whood-yop.github.io/niyam/ with the flowchart at `/niyam/flowchart.html`.
+Serve `web/` and `/api/` from the same HTTPS origin. The included production Compose configuration runs one Niyam process behind Caddy, with persistent account and proxy volumes and a privately mounted market-data directory. A second process using the same state directory is refused, protecting the signal scanner and restart recovery.
 
-Pages is static hosting. It cannot run the Python backend or keep private account state. The public build deliberately sends users to their own backend workspace for registration/sign-in; passwords are not collected by Pages. Repository source is public, market data and `.env` are not. This is an open-source preview, not a commercial SaaS deployed on Pages.
+This deployment is intended for a bounded initial service. SQLite, the in-process job executor and scanner are deliberate single-instance constraints. Do not add replicas or Uvicorn workers; coordinated jobs and a shared database require a separate architecture change. The container has two CPUs, a 2 GiB memory limit and 128 process/thread slots; load-test the intended dataset and user traffic before choosing these as production capacity.
 
-## Local service
+## Private inputs
 
-Use Python 3.12 and `python scripts/start.py`. The service binds `127.0.0.1:8000` by default. The database lives in `var/niyam.sqlite3`; back up `var/` and your data privately. Public registration is available on the backend, but a loopback server is reachable only on that computer. Save the one-time recovery code; email verification and email recovery are not installed.
+Copy `.env.example` to `.env` on the server. Supply:
 
-Docker files are included for future deployment, but have not been runtime-tested in this environment. Compose maps only loopback, mounts `data/`, and keeps state in a named volume. Do not delete that volume if it contains accounts.
+| Setting | Meaning |
+| --- | --- |
+| `NIYAM_ENV=production` | Require a valid HTTPS public origin and secure cookies |
+| `NIYAM_PUBLIC_URL` | Public origin such as `https://research.example.com`, with no path |
+| `NIYAM_DOMAIN` | DNS hostname matching that origin |
+| `NIYAM_PRICE_BASIS` | Set to `split_bonus_adjusted_ex_dividend` only after checking the source data |
+| `LLM_BASE_URL`, `LLM_MODEL` | Compatible model endpoint and model identifier |
+| `LLM_PROVIDER`, `LLM_API_KEY` | Operator label and provider credentials, where required |
+| `TAVILY_API_KEY` | Optional reference lookup |
+| `DAILY_FEED_URL`, `DAILY_FEED_API_KEY` | Optional canonical daily feed |
+| `NIYAM_REGISTRATION_OPEN` | `true` or `false`; close registration when desired |
 
-## Connections
+Set DNS to the server and permit inbound TCP 80/443. Keep the backend port private. If the configured `172.30.0.0/24` Docker network conflicts with the host, change its subnet, static proxy/backend addresses and trusted-proxy argument together.
 
-Copy `.env.example` to `.env`; fill the provider/base URL/model and optional key. The interpreter supports an OpenAI-compatible `/chat/completions` endpoint with JSON-object responses. Provider compatibility, model quality and availability must be tested with the chosen model. Keys stay server-side. Ordinary ChatGPT Plus billing and API-platform billing are separate; this build does not implement ChatGPT OAuth/token-sharing integration. The user deliberately supplies connections later.
+Prices and benchmark use the [data contract](DATA.md). The three directories are intentionally empty in Git. Install files atomically. File changes are discovered automatically; do not preserve both modification time and size when replacing a dataset. Environment/key changes require restarting the service. `configured` or readiness booleans indicate settings and data availability, not proof of provider correctness or exchange provenance.
 
-## AWS migration boundary
+## Build and check
 
-The API/worker separation and container make migration possible, but this edition is not a production multi-tenant service. Before shared internet exposure: provision HTTPS, persistent private storage and backups, a production identity system, explicit allowed origins/hosts, distributed job scheduling, API/body-size limits at the proxy, quota enforcement and per-user access tests. Replace local SQLite and in-memory queue/rate controls as load requires. Multi-worker use needs coordinated scheduling; running multiple signal scanners is not the recommended local configuration. No AWS infrastructure or credentials have been provisioned.
+```sh
+docker compose -f compose.production.yaml config --quiet
+docker compose -f compose.production.yaml build
+docker compose -f compose.production.yaml run --rm niyam python scripts/preflight.py --probe-model
+docker compose -f compose.production.yaml up -d
+```
+
+The model probe makes one provider request using a public SMA template and can incur its normal API charge. It does not send account documents or validate all languages. Run broader interpretation acceptance tests against the chosen model separately.
+
+The bind-mounted `data/` directory must be readable and, if the feed is enabled, writable by container UID 10001. Account state is in the `niyam-state` volume. The container filesystem is otherwise read-only; Numba cache and document processes use bounded temporary storage. Do not delete the state volume during upgrades.
+
+Open the public URL from a desktop and a phone. Verify account creation, recovery-code storage, a reviewed real-data backtest, optimisation, CSV/JSON exports, paper-watch creation and logout. Confirm that no data/API setup form appears. Check that unauthenticated requests cannot read saved work. GitHub Pages is not a substitute for this deployment.
+
+## Monitoring and recovery
+
+- `/api/health` is process liveness. `/api/ready` returns 503 until research data, price-basis attestation and model settings exist. It does not make paid-provider calls.
+- `/api/runtime` supplies safe readiness flags for the frontend. The browser refreshes them every 30 seconds. No provider URL, API key, filesystem path or ingestion error is included.
+- Record proxy/application logs privately and alert on repeated 5xx responses, failed jobs, disk pressure, exhausted storage quotas and feed failures. Add edge-level abuse controls appropriate to traffic; application throttles are not a network flood defence.
+- Browser sessions expire after 12 hours. Mailbox verification and email recovery are not implemented. Users must retain their recovery code. Registration is capped at 1,000 accounts; each account has 200 strategies, 200 reports, 50 documents with 1,000,000 extracted characters total, and 20 watches. The scanner retains the latest 1,000 alerts per account.
+- A restart marks unfinished jobs interrupted. Normal shutdown requests cancellation and drains active jobs. Jobs check cancellation between safe engine checkpoints. A forced kill or host failure requires rerunning unfinished research.
+
+Create a consistent private backup:
+
+```sh
+docker compose -f compose.production.yaml exec niyam python scripts/backup.py --output /app/var/backups/backup-YYYY-MM-DD.sqlite3
+```
+
+The command refuses an existing destination, uses SQLite's backup API, and checks database integrity. Copy backups to private storage outside the server and choose a retention schedule. Back up the installed data files and configuration separately. Test restoration before launch: stop Niyam, preserve its current state volume, restore the verified backup as `niyam.sqlite3` in a fresh state directory/volume, preserve UID ownership, and start only one process. Confirm account access and saved reports. Never replace a live WAL database by copying a single file over it.
+
+## Release gate
+
+Before public launch, require passing branch CI, container/proxy startup on the target host, successful real-provider and data preflight, inspected real-data accounting, an HTTPS/session test, a restored backup, and a representative capacity test. No live host or provider credentials are provisioned by this repository. Record that evidence with the deployed commit and dataset fingerprint.
+
+Configuration references: [Caddy request limits](https://caddyserver.com/docs/caddyfile/directives/request_body), [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy), [Uvicorn settings](https://uvicorn.dev/settings/).

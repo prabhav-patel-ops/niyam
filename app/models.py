@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from datetime import date,datetime
+from datetime import date,datetime,timedelta
 from zoneinfo import ZoneInfo
 
 def india_today():
     return datetime.now(ZoneInfo("Asia/Kolkata")).date()
+
+
+def completed_through():
+    now=datetime.now(ZoneInfo('Asia/Kolkata'))
+    return now.date() if now.hour>=16 else now.date()-timedelta(days=1)
 from typing import Literal
 import re
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -47,6 +52,15 @@ class Expr(Strict):
             raise ValueError('A named value needs a name.')
         if self.op == 'fundamental' and self.name not in {'roe','roce','pe','pb','ps'}:
             raise ValueError('Supported fundamental fields: roe, roce, pe, pb, ps.')
+        boolean={'gt','gte','lt','lte','eq','cross_above','cross_below','all','any','not'}
+        def is_boolean(expr):
+            while expr.op=='lag':
+                expr=expr.args[0]
+            return expr.op in boolean
+        if self.op in {'all','any','not'} and any(not is_boolean(x) for x in self.args):
+            raise ValueError('Logical groups require true/false conditions, not raw numbers.')
+        if self.op not in {'all','any','not','lag'} and any(is_boolean(x) for x in self.args):
+            raise ValueError('Indicators, arithmetic and comparisons require numeric arguments.')
         return self
 
 
@@ -79,6 +93,15 @@ class Strategy(Strict):
 
     @model_validator(mode='after')
     def validate_strategy(self):
+        if any(not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,39}',key) or key in {'constructor','prototype','__proto__'} for key in self.parameters):
+            raise ValueError('Parameter names must be simple identifiers with up to 40 characters.')
+        boolean={'gt','gte','lt','lte','eq','cross_above','cross_below','all','any','not'}
+        for rule in [self.entry,self.exit]:
+            root=rule
+            while root.op=='lag':
+                root=root.args[0]
+            if root.op not in boolean:
+                raise ValueError('Entry and exit rules must produce true/false conditions.')
         if self.start >= self.end:
             raise ValueError('The end date must be after the start date.')
         if self.end > india_today():
@@ -113,6 +136,13 @@ class RunRequest(Strict):
     train_pct: int = Field(default=70, ge=50, le=85)
     max_trials: int = Field(default=40, ge=1, le=100)
     min_trades: int = Field(default=3, ge=0, le=1000)
+
+    @model_validator(mode='after')
+    def check_space(self):
+        if self.mode=='optimise':
+            if not self.search_space or any(k not in self.strategy.parameters or not values or len(values)>20 for k,values in self.search_space.items()):
+                raise ValueError('Search existing parameters with 1 to 20 finite values each.')
+        return self
 
 
 def template(kind='trend') -> Strategy:

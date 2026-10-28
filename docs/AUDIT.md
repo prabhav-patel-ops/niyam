@@ -1,4 +1,6 @@
-# Release audit
+# Historical release audit
+
+This record describes the original published source. See [Production preparation audit](PRODUCTION_AUDIT.md) for the current remediation and release gate.
 
 Verified on the source published in this repository; the real market dataset and provider credentials are intentionally absent.
 

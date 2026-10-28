@@ -4,7 +4,10 @@ permissions:
   contents: read
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,3 +23,52 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node --check web/app.js
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+        if: runner.os == 'Linux'
+      - run: npm run test:browser
+        if: runner.os == 'Linux'
+        env:
+          NIYAM_TEST_PYTHON: python
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-${{ matrix.os }}
+          path: artifacts/
+          retention-days: 7
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pip-audit==2.9.0
+      - run: pip-audit -r requirements.lock --disable-pip --no-deps
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t niyam-audit .
+      - run: |
+          docker run -d --name niyam-audit --read-only --tmpfs /tmp:rw,size=128m --mount type=volume,source=niyam-audit-state,target=/app/var --mount type=volume,source=niyam-audit-data,target=/app/data -p 127.0.0.1:8000:8000 niyam-audit
+          for i in $(seq 1 60); do
+            if curl --fail http://127.0.0.1:8000/api/health; then break; fi
+            sleep 2
+          done
+          curl --fail http://127.0.0.1:8000/api/health
+          test "$(curl -s -o /tmp/readiness.json -w '%{http_code}' http://127.0.0.1:8000/api/ready)" = 503
+          curl --fail http://127.0.0.1:8000/ > /tmp/index.html
+          docker exec niyam-audit python -c "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/api/auth/signup',data=b'{\"name\":\"CI user\",\"email\":\"ci@example.com\",\"password\":\"CI-test-password-123\"}',headers={'Content-Type':'application/json'}))"
+          docker exec niyam-audit python scripts/backup.py --output /app/var/ci-backup.sqlite3
+      - run: |
+          cp .env.example .env
+          NIYAM_PUBLIC_URL=https://niyam.example NIYAM_DOMAIN=niyam.example docker compose -f compose.production.yaml config --quiet
+          docker run --rm -e NIYAM_DOMAIN=niyam.example -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.7-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - run: docker logs niyam-audit
+        if: always()
