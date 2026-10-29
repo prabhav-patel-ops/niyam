@@ -208,3 +208,59 @@ def test_dataset_modified_during_load_is_not_cached(client,prices,monkeypatch):
     with pytest.raises(ValueError,match='changed during loading'):
         data.load_dataset()
     assert not data._cache
+
+
+def test_backup_restore_preserves_work_and_revokes_sessions(client,tmp_path,monkeypatch):
+    import subprocess
+    import sys
+    from scripts.restore import restore
+    h,user=register(client)
+    spec=template().model_dump(mode='json')
+    saved=client.post('/api/strategies',headers=h,json=spec).json()['id']
+    uid=user['user']['id']
+    with store.db() as conn:
+        conn.execute('INSERT INTO jobs(id,user_id,state,request,created) VALUES(?,?,?,?,?)',('inflight',uid,'running',json.dumps({'strategy':spec}),1))
+        conn.execute('INSERT INTO jobs(id,user_id,state,request,result,created) VALUES(?,?,?,?,?,?)',('report',uid,'completed',json.dumps({'strategy':spec}),'{}',1))
+    backup=tmp_path/'restorable.sqlite3'
+    env={**os.environ,'NIYAM_STATE_DIR':str(store.STATE),'NIYAM_ENV':'development'}
+    result=subprocess.run([sys.executable,'scripts/backup.py','--output',str(backup)],env=env,capture_output=True,text=True,timeout=30)
+    assert result.returncode==0,result.stderr
+    restored=tmp_path/'restored-state'
+    restore(backup,restored)
+    monkeypatch.setattr(store,'STATE',restored)
+    assert client.get('/api/auth/me',headers=h).status_code==401
+    login=client.post('/api/auth/login',json={'email':'test@example.com','password':'Test-only-password-123!'})
+    assert login.status_code==200
+    recovered={'Authorization':'Bearer '+login.json()['token']}
+    assert client.get('/api/strategies',headers=recovered).json()[0]['id']==saved
+    assert client.get('/api/jobs/report',headers=recovered).json()['state']=='completed'
+    assert client.get('/api/jobs/inflight',headers=recovered).json()['state']=='interrupted'
+
+
+def test_restore_refuses_existing_or_incompatible_state(client,tmp_path):
+    from scripts.restore import restore
+    import sqlite3
+    backup=tmp_path/'invalid.sqlite3'
+    with sqlite3.connect(backup) as conn:conn.execute('CREATE TABLE unrelated(id INTEGER)')
+    destination=tmp_path/'never-created'
+    with pytest.raises(ValueError,match='compatible'):restore(backup,destination)
+    assert not destination.exists()
+    existing=tmp_path/'existing';existing.mkdir()
+    marker=existing/'keep.txt';marker.write_text('private state')
+    with pytest.raises(ValueError,match='Existing state'):restore(backup,existing)
+    assert marker.read_text()=='private state'
+
+
+def test_parallel_submissions_obey_account_queue_limit(client,prices,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from app import jobs
+    h,_=register(client);install_data(prices)
+    monkeypatch.setenv('NIYAM_PRICE_BASIS',runtime.PRICE_BASIS)
+    # Hold work in the queue to measure admission, independently of CPU speed.
+    monkeypatch.setattr(jobs,'enqueue',lambda _:None)
+    spec=template().model_dump(mode='json');spec.update(symbols=['TEST'],start='2020-01-01',end='2021-02-23')
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        statuses=list(pool.map(lambda _:client.post('/api/jobs',headers=h,json={'strategy':spec}).status_code,range(16)))
+    assert statuses.count(202)==2 and statuses.count(429)==14
+    with store.db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM jobs WHERE state='queued'").fetchone()[0]==2

@@ -5,7 +5,7 @@ COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
 COPY app ./app
 COPY web ./web
-COPY scripts/preflight.py scripts/backup.py ./scripts/
+COPY scripts/preflight.py scripts/backup.py scripts/restore.py ./scripts/
 COPY .env.example ./
 RUN useradd --uid 10001 --create-home niyam && mkdir -p data/prices data/benchmark data/fundamentals var && chown -R niyam:niyam /app
 USER niyam

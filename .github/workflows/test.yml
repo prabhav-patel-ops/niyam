@@ -72,3 +72,24 @@ jobs:
           docker run --rm -e NIYAM_DOMAIN=niyam.example -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.7-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - run: docker logs niyam-audit
         if: always()
+      - name: Start production topology with an isolated test certificate
+        run: |
+          python3 tests/deployment_smoke.py --prepare-data
+          printf '\nNIYAM_DOMAIN=niyam.test\nNIYAM_PUBLIC_URL=https://niyam.test\nNIYAM_PRICE_BASIS=split_bonus_adjusted_ex_dividend\n' >> .env
+          echo '127.0.0.1 niyam.test' | sudo tee -a /etc/hosts
+          docker compose -p niyam-smoke -f compose.production.yaml -f tests/compose.smoke.yaml up -d --no-build
+          for i in $(seq 1 60); do
+            if docker compose -p niyam-smoke -f compose.production.yaml -f tests/compose.smoke.yaml cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/niyam-smoke-root.crt; then break; fi
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            if curl --noproxy '*' --cacert /tmp/niyam-smoke-root.crt --fail https://niyam.test/api/health; then break; fi
+            sleep 2
+          done
+          NIYAM_TEST_CA=/tmp/niyam-smoke-root.crt python3 tests/deployment_smoke.py
+      - name: Production topology logs
+        if: always()
+        run: docker compose -p niyam-smoke -f compose.production.yaml -f tests/compose.smoke.yaml logs --no-color
+      - name: Remove isolated test deployment
+        if: always()
+        run: docker compose -p niyam-smoke -f compose.production.yaml -f tests/compose.smoke.yaml down --volumes

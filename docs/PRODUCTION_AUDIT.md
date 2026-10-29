@@ -36,7 +36,7 @@ Public deployment remains conditional on the release gate in [DEPLOYMENT.md](DEP
 - Browser data and the provider are explicitly synthetic test fixtures. Their returns are not investment results, and their model output is not evidence of a paid model's language accuracy.
 - The dependency scan found three pypdf advisories in 6.21.1: `GHSA-6c7f-9265-g8fw`, `GHSA-jr96-gvgh-j3r4`, and `GHSA-gmh7-3g9r-mjh5`. After upgrading to 6.21.2, the pinned runtime requirements scan reported no known vulnerabilities. npm reported no known vulnerabilities. This is a dated database lookup, not a guarantee against unknown vulnerabilities.
 
-Local verification: 49 Python tests and 92 DOM checks passed; the complete real-browser flow passed. CI results are recorded in the pull request. This workstation had no Docker executable, so local Docker/Caddy runtime execution is not claimed; the new container CI job must pass before deployment approval. The runtime base image and Caddy image also need the operator's normal image-patching process.
+The initial release preparation passed 49 Python tests, 92 DOM checks and the complete real-browser flow. GitHub CI then passed Windows/Linux tests, container startup and proxy/config validation. Follow-up checks add non-destructive backup restoration, account/report recovery, revoked restored sessions, and concurrent job-admission tests. The expanded container job exercises the production HTTPS topology with an isolated test certificate and a real backtest through the proxy. Latest counts and CI results are recorded in the pull request. This workstation had no Docker executable, so Docker/Caddy runtime evidence comes from CI. The runtime base image and Caddy image also need the operator's normal image-patching process.
 
 ## Remaining launch checks
 
@@ -44,6 +44,6 @@ Local verification: 49 Python tests and 92 DOM checks passed; the complete real-
 2. Install real vendor files. Verify price adjustments, benchmark identity, dates, missing sessions, corporate actions, delisted securities and point-in-time fundamental vintages. Reconcile representative trades and costs independently.
 3. Configure the actual provider; run preflight and a labelled Hindi/English/Hinglish acceptance set. No measured interpretation accuracy percentage is established by this audit.
 4. Deploy one process behind HTTPS on the target host; confirm proxy identity, secure cookies, mobile access and private persistent storage.
-5. Restore a backup and run representative concurrency/dataset capacity tests. Monitor resource saturation and failed jobs; size the service accordingly.
+5. Verify backup restoration and representative concurrency/dataset capacity on the chosen host. Automated restore and modest concurrency checks are included; real deployment capacity still depends on the installed data and traffic. Monitor resource saturation and failed jobs; size the service accordingly.
 
 No broker integration, live exchange certification, intraday fill accuracy, cloud provisioning, email identity verification, email recovery or horizontal scalability has been added. These are product/deployment boundaries, not hidden implemented features.

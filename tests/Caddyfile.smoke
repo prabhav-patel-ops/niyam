@@ -1,0 +1,8 @@
+# Test-only internal CA. Production uses deploy/Caddyfile and public certificates.
+{$NIYAM_DOMAIN} {
+    tls internal
+    request_body {
+        max_size 9MB
+    }
+    reverse_proxy niyam:8000
+}

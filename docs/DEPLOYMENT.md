@@ -2,6 +2,8 @@
 
 ## Supported architecture
 
+GitHub stores the source and runs the automated checks. GitHub Pages serves the static preview; it cannot keep the Python API, account database or job workers running. GitHub Actions is also an ephemeral test runner, not the live application host. Keep the repository on GitHub and deploy the working workspace to a server/container host under one HTTPS origin. No user-facing backend URL or credentials form is needed.
+
 Serve `web/` and `/api/` from the same HTTPS origin. The included production Compose configuration runs one Niyam process behind Caddy, with persistent account and proxy volumes and a privately mounted market-data directory. A second process using the same state directory is refused, protecting the signal scanner and restart recovery.
 
 This deployment is intended for a bounded initial service. SQLite, the in-process job executor and scanner are deliberate single-instance constraints. Do not add replicas or Uvicorn workers; coordinated jobs and a shared database require a separate architecture change. The container has two CPUs, a 2 GiB memory limit and 128 process/thread slots; load-test the intended dataset and user traffic before choosing these as production capacity.
@@ -55,7 +57,17 @@ Create a consistent private backup:
 docker compose -f compose.production.yaml exec niyam python scripts/backup.py --output /app/var/backups/backup-YYYY-MM-DD.sqlite3
 ```
 
-The command refuses an existing destination, uses SQLite's backup API, and checks database integrity. Copy backups to private storage outside the server and choose a retention schedule. Back up the installed data files and configuration separately. Test restoration before launch: stop Niyam, preserve its current state volume, restore the verified backup as `niyam.sqlite3` in a fresh state directory/volume, preserve UID ownership, and start only one process. Confirm account access and saved reports. Never replace a live WAL database by copying a single file over it.
+The command refuses an existing destination, uses SQLite's backup API, and checks database integrity. Copy backups to private storage outside the server and choose a retention schedule. Back up the installed data files and configuration separately.
+
+Restore into a **new** private directory, never over live state:
+
+```sh
+python scripts/restore.py --input /private/backups/backup.sqlite3 --state-dir /private/niyam-restored
+```
+
+The restore command verifies database integrity and the expected schema, preserves accounts/saved work, revokes backed-up sessions, and marks unfinished jobs interrupted. Existing directories are refused. Stop the old service, preserve its state volume, configure `NIYAM_STATE_DIR` or mount a new volume containing the restored directory, preserve container UID 10001 ownership, and start only one process. Sign in again and confirm saved reports. Never replace a live WAL database by copying a single file over it.
+
+CI exercises backup restoration through the application login and saved-strategy/report APIs. It also starts the production Compose topology with an isolated test CA, verifies HTTPS certificate trust, Secure cookie sessions, cross-origin rejection, a real template backtest through the proxy, and 32 parallel liveness reads with concurrency 8. The internal test certificate is confined to `tests/Caddyfile.smoke`; production retains public automatic HTTPS. These are synthetic integration checks, not capacity certification for an unknown real dataset or internet traffic.
 
 ## Release gate
 

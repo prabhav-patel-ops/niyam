@@ -47,7 +47,7 @@ npm run test:browser
 
 Browser tests start an isolated synthetic fixture with a test model endpoint. They do not contact a paid provider or represent investment performance. Set `NIYAM_TEST_PYTHON` if Python is outside `.venv/` (for example `python` in CI).
 
-CI runs Python tests on Linux and Windows, DOM checks, Linux Chromium flows, dependency scans, container smoke tests, and proxy/config validation. See the current CI result before treating a release as passed.
+CI runs Python tests on Linux and Windows, DOM checks, Linux Chromium flows, dependency scans, container smoke tests, backup restoration, and a production HTTPS proxy/backtest/session flow. See the current CI result before treating a release as passed.
 
 [Data contract](docs/DATA.md) · [Simulation method](docs/METHOD.md) · [Audit](docs/PRODUCTION_AUDIT.md) · [Security](SECURITY.md) · [Research](docs/RESEARCH.md)
 
