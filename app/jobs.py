@@ -55,7 +55,7 @@ def execute(job_id):
             row=c.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()
         request=RunRequest.model_validate_json(row['request'])
         try:
-            frames,benchmark,version=load_dataset()
+            frames,benchmark,version=load_dataset(request.strategy.symbols)
         except Exception:
             raise ValueError('Market research is temporarily unavailable. Please try again shortly.') from None
         if benchmark.empty:

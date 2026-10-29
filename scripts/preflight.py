@@ -16,12 +16,15 @@ def main():
     checks={}
     try:
         runtime.validate_config();checks['configuration']=True
-        frames,benchmark,version=data.load_dataset()
-        if not frames or benchmark.empty or not runtime.price_basis_confirmed():
+        catalog=data.catalog()
+        if not catalog['ready'] or not runtime.price_basis_confirmed():
             raise ValueError('Install price/benchmark files and confirm NIYAM_PRICE_BASIS.')
         # Smoke-test every stock independently; failures identify a bad coverage universe.
         counts=[]
-        for symbol,frame in frames.items():
+        for item in catalog['symbols']:
+            symbol=item['symbol']
+            frames,benchmark,version=data.load_dataset([symbol])
+            frame=frames[symbol]
             spec=template()
             start=max(frame.index[0].date(),benchmark.index[0].date())
             end=min(frame.index[-1].date(),benchmark.index[-1].date(),completed_through())
@@ -35,7 +38,7 @@ def main():
         if args.probe_model:
             from app.assistant import interpret
             defaults=template().model_dump(mode='json')
-            defaults.update(symbols=[next(iter(frames))],price_basis_confirmed=True)
+            defaults.update(symbols=[catalog['symbols'][0]['symbol']],price_basis_confirmed=True)
             out=interpret('Buy on a 20-day SMA crossover above 50-day SMA; exit on the reverse crossover; fixed 5 percent stop.',[],defaults)
             if out['status']!='ready' or out['strategy']['entry']!=defaults['entry'] or out['strategy']['exit']!=defaults['exit']:
                 raise ValueError('The model did not reproduce the public template. Inspect provider compatibility.')

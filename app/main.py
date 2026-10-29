@@ -349,7 +349,7 @@ def add_watch(spec:Strategy,user=Depends(current_user)):
     if not spec.symbols or not spec.price_basis_confirmed:
         raise HTTPException(422,'Select stocks from the available universe before creating a watch.')
     try:
-        frames,benchmark,_=load_dataset()
+        frames,benchmark,_=load_dataset(spec.symbols)
     except Exception:
         raise HTTPException(503,'Market research is temporarily unavailable. Please try again shortly.')
     latest=signals.latest_closed_date(benchmark)

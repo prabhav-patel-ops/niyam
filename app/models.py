@@ -13,6 +13,8 @@ def completed_through():
 from typing import Literal
 import re
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+FUNDAMENTAL_FIELDS=('roe','roce','pe','pb','ps','bv','eps','fcf','revenue','shares_outstanding',
+                    'capital_employed','cfo','capex','pbt','interest_expense','market_cap')
 
 
 class Strict(BaseModel):
@@ -50,8 +52,8 @@ class Expr(Strict):
             raise ValueError('A constant needs a number.')
         if self.op in {'parameter','fundamental'} and not self.name:
             raise ValueError('A named value needs a name.')
-        if self.op == 'fundamental' and self.name not in {'roe','roce','pe','pb','ps'}:
-            raise ValueError('Supported fundamental fields: roe, roce, pe, pb, ps.')
+        if self.op == 'fundamental' and self.name not in FUNDAMENTAL_FIELDS:
+            raise ValueError('Unsupported fundamental field. Use '+', '.join(FUNDAMENTAL_FIELDS)+'.')
         boolean={'gt','gte','lt','lte','eq','cross_above','cross_below','all','any','not'}
         def is_boolean(expr):
             while expr.op=='lag':

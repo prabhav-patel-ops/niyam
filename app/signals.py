@@ -26,7 +26,8 @@ def refresh():
             watches=c.execute('SELECT * FROM watches WHERE active=1').fetchall()
         if not watches:
             return
-        frames,benchmark,_=load_dataset()
+        selected=sorted({s for watch in watches for s in json.loads(watch['spec']).get('symbols',[])})
+        frames,benchmark,_=load_dataset(selected)
         latest=latest_closed_date(benchmark)
         if not latest:
             return
