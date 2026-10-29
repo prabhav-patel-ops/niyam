@@ -1,0 +1,2 @@
+# Optional private market-data ingestion tools; not required by the API server.
+yfinance==1.7.0

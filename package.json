@@ -1,1 +1,1 @@
-{"name":"niyam","private":true,"scripts":{"test":"node tests/ui.cjs"},"devDependencies":{"jsdom":"26.1.0"}}
+{"name":"niyam","private":true,"scripts":{"test":"node tests/ui.cjs","test:browser":"node tests/browser.cjs"},"devDependencies":{"jsdom":"26.1.0","playwright":"1.62.1"}}

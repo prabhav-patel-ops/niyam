@@ -1,0 +1,6 @@
+services:
+  niyam:
+    image: niyam-audit
+  proxy:
+    volumes:
+      - ./tests/Caddyfile.smoke:/etc/caddy/Caddyfile:ro

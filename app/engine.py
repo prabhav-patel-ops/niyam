@@ -9,7 +9,7 @@ import time
 import numpy as np
 import pandas as pd
 from numba import njit
-from .models import Expr, Strategy
+from .models import Expr, Strategy,completed_through
 from .rules import Rules
 
 
@@ -135,7 +135,10 @@ def run_backtest(strategy:Strategy, frames:dict, benchmark:pd.DataFrame, finalis
     if not strategy.price_basis_confirmed:
         raise ValueError('Confirm that OHLC prices are adjusted for splits and bonuses, but not dividends, in Data assumptions.')
     start,end=pd.Timestamp(strategy.start),pd.Timestamp(strategy.end)
+    end=min(end,pd.Timestamp(completed_through()))
     dates=benchmark.index[(benchmark.index>=start)&(benchmark.index<=end)]
+    if len(dates)>20000 or len(dates)*len(strategy.symbols)>2000000:
+        raise ValueError('This experiment is too large. Use fewer stocks or a shorter date range.')
     if len(dates)<3:
         raise ValueError('Add Nifty 50 price-index data covering at least three sessions in this date range.')
     curves=[]; exposures=[]; all_trades=[]; positions=[]

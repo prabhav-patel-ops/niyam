@@ -2,11 +2,13 @@
 from pathlib import Path
 from functools import lru_cache
 import hashlib
+import json
 import os
 import threading
 import duckdb
 import numpy as np
 import pandas as pd
+from .models import completed_through,FUNDAMENTAL_FIELDS
 
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('NIYAM_DATA_DIR',ROOT/'data')).resolve()
@@ -24,9 +26,17 @@ def signature():
     return tuple((str(p),p.stat().st_size,p.stat().st_mtime_ns) for kind in ['prices','benchmark','fundamentals'] for p in files_for(kind))
 
 
-def read_table(path):
+def read_table(path,symbols=None):
     with duckdb.connect(':memory:') as con:
-        frame=(con.read_parquet(str(path)) if path.suffix.lower()=='.parquet' else con.read_csv(str(path),header=True)).df()
+        relation=con.read_parquet(str(path)) if path.suffix.lower()=='.parquet' else con.read_csv(str(path),header=True)
+        if symbols is not None:
+            column=next((x for x in relation.columns if x.strip().lower()=='symbol'),None)
+            if column is not None:
+                con.register('source_table',relation)
+                placeholders=','.join('?' for _ in symbols)
+                frame=con.execute('SELECT * FROM source_table WHERE upper(trim("'+column.replace('"','""')+'")) IN ('+placeholders+')',list(symbols)).df() if symbols else relation.limit(0).df()
+            else:frame=relation.df()
+        else:frame=relation.df()
     frame.columns=[str(c).strip().lower() for c in frame.columns]
     return frame
 
@@ -70,62 +80,79 @@ def join_fundamentals(frame,fundamentals,symbol):
     part['usable_date']=pd.to_datetime(part['available_at'],utc=True).dt.tz_convert('Asia/Kolkata').dt.tz_localize(None).dt.normalize()+pd.Timedelta(days=1)
     if part.duplicated('usable_date').any():
         raise ValueError(f'{symbol}: multiple fundamental records become available on the same date; consolidate these explicitly.')
-    fields=[x for x in ['roe','roce','pe','pb','ps'] if x in part]
+    fields=[x for x in FUNDAMENTAL_FIELDS if x in part]
     for x in fields:
         part[x]=pd.to_numeric(part[x],errors='raise')
+        if np.isinf(part[x]).any():
+            raise ValueError('Fundamentals cannot contain infinite values.')
     return pd.merge_asof(frame.reset_index().sort_values('date'),part[['usable_date']+fields].sort_values('usable_date'),
                          left_on='date',right_on='usable_date',direction='backward').drop(columns=['usable_date']).set_index('date')
 
 
-def read_price_files(paths,benchmark=False):
+def read_price_files(paths,benchmark=False,symbols=None):
     manual=[p for p in paths if p.name!='_daily_feed.csv']
     feed=[p for p in paths if p.name=='_daily_feed.csv']
     parts=[]
-    if feed:parts.append(validate_prices(pd.concat([read_table(p) for p in feed],ignore_index=True),benchmark))
-    if manual:parts.append(validate_prices(pd.concat([read_table(p) for p in manual],ignore_index=True),benchmark))
+    if feed:parts.append(validate_prices(pd.concat([read_table(p,symbols) for p in feed],ignore_index=True),benchmark))
+    if manual:parts.append(validate_prices(pd.concat([read_table(p,symbols) for p in manual],ignore_index=True),benchmark))
     # Explicit historical user files win over feed updates on overlaps.
     return validate_prices(pd.concat(parts,ignore_index=True).drop_duplicates(['symbol','date'],keep='last'),benchmark)
 
 
-def load_dataset():
+def load_dataset(symbols=None):
     with _lock:
         sig=signature()
-        if sig in _cache:
-            return _cache[sig]
+        selected=tuple(sorted(set(symbols))) if symbols is not None else None
+        key=(sig,selected)
+        if key in _cache:
+            return _cache[key]
         prices=files_for('prices'); benchmarks=files_for('benchmark'); funds=files_for('fundamentals')
         frames={}
         if prices:
-            all_prices=read_price_files(prices)
+            all_prices=read_price_files(prices,symbols=selected)
             frames={symbol:part.drop(columns=['symbol']).set_index('date').sort_index() for symbol,part in all_prices.groupby('symbol')}
         benchmark=pd.DataFrame(columns=['close'],index=pd.DatetimeIndex([],name='date'))
         if benchmarks:
             benchmark=read_price_files(benchmarks,True).set_index('date')[['close']]
         if funds:
-            f=pd.concat([read_table(p) for p in funds],ignore_index=True)
+            f=pd.concat([read_table(p,selected) for p in funds],ignore_index=True)
             if not {'symbol','available_at'}.issubset(f):
                 raise ValueError('Fundamentals need symbol and available_at: the actual public release date, not the financial period end.')
             f['symbol']=f.symbol.astype(str).str.upper()
             frames={s:join_fundamentals(df,f,s) for s,df in frames.items()}
         digest=hashlib.sha256()
         for path,_,_ in sig:
-            digest.update(Path(path).name.encode())
+            digest.update(str(Path(path).relative_to(DATA)).replace('\\','/').encode())
+            digest.update(b'\0')
             with open(path,'rb') as handle:
                 for block in iter(lambda:handle.read(1024*1024),b''):
                     digest.update(block)
+            digest.update(b'\0')
+        if signature()!=sig:
+            raise ValueError('The dataset changed during loading. Retry after the update finishes.')
         result=(frames,benchmark,digest.hexdigest())
         _cache.clear()
-        _cache[sig]=result
+        _cache[key]=result
         return result
 
 
 def catalog():
     try:
+        # An installer-produced catalog avoids loading a multi-million-row universe
+        # for every page refresh. File metadata must still match the installed snapshot.
+        managed=DATA/'managed_catalog.json'
+        if managed.is_file():
+            saved=json.loads(managed.read_text(encoding='utf-8'))
+            current=[[str(Path(p).relative_to(DATA)).replace('\\','/'),size,mtime] for p,size,mtime in signature()]
+            if saved.get('signature')==current:return saved['catalog']
         frames,benchmark,version=load_dataset()
-        symbols=[{'symbol':s,'rows':len(df),'start':str(df.index[0].date()),'end':str(df.index[-1].date())} for s,df in frames.items()]
+        cutoff=pd.Timestamp(completed_through())
+        benchmark=benchmark.loc[:cutoff]
+        symbols=[{'symbol':s,'rows':len(df.loc[:cutoff]),'start':str(df.index[0].date()),'end':str(df.loc[:cutoff].index[-1].date())} for s,df in frames.items() if len(df.loc[:cutoff])>=3]
         return {'symbols':symbols,'rows':sum(x['rows'] for x in symbols),'benchmark_rows':len(benchmark),
                 'benchmark_start':str(benchmark.index[0].date()) if len(benchmark) else None,
                 'benchmark_end':str(benchmark.index[-1].date()) if len(benchmark) else None,
-                'version':version,'ready':bool(symbols and len(benchmark)),'errors':[],
+                'version':version,'ready':bool(symbols and len(benchmark)>=3),'errors':[],
                 'folders':{'prices':'data/prices/','benchmark':'data/benchmark/','fundamentals':'data/fundamentals/'}}
     except Exception as e:
         return {'symbols':[],'rows':0,'benchmark_rows':0,'ready':False,'errors':[str(e)],'folders':{'prices':'data/prices/','benchmark':'data/benchmark/','fundamentals':'data/fundamentals/'}}

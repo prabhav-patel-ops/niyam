@@ -6,7 +6,8 @@ from .conftest import register
 def test_empty_data_and_no_fake_ai(client):
     h,_=register(client)
     health=client.get('/api/health').json()
-    assert health['connections']['ai'] is False
+    assert 'connections' not in health
+    assert client.get('/api/runtime').json()['interpretation_ready'] is False
     data=client.get('/api/data',headers=h).json()
     assert data['ready'] is False and data['rows']==0
     out=client.post('/api/interpret',headers=h,json={'text':'20 ma ke upar buy karo'}).json()
@@ -60,8 +61,9 @@ def test_bad_password_and_rate_limit(client):
     assert result.status_code==429
 
 
-def test_end_to_end_backtest_job_and_private_report(client,prices):
+def test_end_to_end_backtest_job_and_private_report(client,prices,monkeypatch):
     from app import data
+    monkeypatch.setenv('NIYAM_PRICE_BASIS','split_bonus_adjusted_ex_dividend')
     h,_=register(client);h2,_=register(client,'second@example.com')
     table=prices.reset_index();table['symbol']='TEST'
     table.to_csv(data.DATA/'prices'/'test.csv',index=False)

@@ -14,7 +14,7 @@ STATE=Path(os.getenv('NIYAM_STATE_DIR',ROOT/'var')).resolve()
 
 @contextlib.contextmanager
 def db():
-    STATE.mkdir(parents=True,exist_ok=True)
+    STATE.mkdir(parents=True,exist_ok=True,mode=0o700)
     conn=sqlite3.connect(STATE/'niyam.sqlite3',timeout=20)
     conn.row_factory=sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL')
@@ -41,9 +41,14 @@ def init():
         CREATE TABLE IF NOT EXISTS alerts(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),watch_id TEXT NOT NULL REFERENCES watches(id),bar_date TEXT NOT NULL,symbol TEXT NOT NULL,action TEXT NOT NULL,body TEXT NOT NULL,created REAL NOT NULL,UNIQUE(watch_id,bar_date,symbol,action));
         CREATE INDEX IF NOT EXISTS jobs_owner ON jobs(user_id,created);
         CREATE INDEX IF NOT EXISTS alerts_owner ON alerts(user_id,created);
+        CREATE TABLE IF NOT EXISTS rate_limits(key TEXT NOT NULL,at REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS rate_lookup ON rate_limits(key,at);
         ''')
-        c.execute("UPDATE jobs SET state='interrupted',error='The backend restarted. You can run this job again.' WHERE state IN ('queued','running')")
+        c.execute("UPDATE jobs SET state='interrupted',error='The research service restarted. You can run this job again.' WHERE state IN ('queued','running')")
         c.execute('DELETE FROM sessions WHERE expires<?',(time.time(),))
+        c.execute('DELETE FROM rate_limits WHERE at<?',(time.time()-3600,))
+    if os.name!='nt':
+        (STATE/'niyam.sqlite3').chmod(0o600)
 
 
 def password_hash(password):
@@ -64,6 +69,8 @@ def verify(password,encoded):
 def session(user_id):
     token=secrets.token_urlsafe(40)
     with db() as c:
+        c.execute('DELETE FROM sessions WHERE expires<?',(time.time(),))
+        c.execute('DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE user_id=? ORDER BY expires DESC LIMIT -1 OFFSET 19)',(user_id,))
         c.execute('INSERT INTO sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),user_id,time.time()+12*3600))
     return token
 
@@ -80,3 +87,17 @@ def new_id():
 
 def dump(value):
     return json.dumps(value,ensure_ascii=False,allow_nan=False,separators=(',',':'))
+
+
+def allow_request(key, maximum, seconds):
+    now=time.time()
+    # Hash keys to avoid retaining raw account emails and IP addresses.
+    key=hashlib.sha256(key.encode()).hexdigest()
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        c.execute('DELETE FROM rate_limits WHERE at<?',(now-3600,))
+        count=c.execute('SELECT COUNT(*) FROM rate_limits WHERE key=? AND at>?',(key,now-seconds)).fetchone()[0]
+        if count>=maximum:
+            return False
+        c.execute('INSERT INTO rate_limits VALUES(?,?)',(key,now))
+    return True

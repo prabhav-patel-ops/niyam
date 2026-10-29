@@ -1,84 +1,54 @@
 # Niyam
 
-Daily Indian-equity strategy research: describe an idea in Hindi, English or Hinglish, review explicit rules, backtest against **Nifty 50**, and watch newly completed daily bars.
+Describe a daily Indian-stock strategy in Hindi, English or Hinglish, review its exact rules, backtest against the Nifty 50 price index, and follow daily paper signals.
 
-**[Open the public interface](https://whood-yop.github.io/niyam/) · [Open the flowchart](https://whood-yop.github.io/niyam/flowchart.html) · [Download the source](https://github.com/whood-yop/niyam/archive/refs/heads/main.zip)**
+## User experience
 
-The public interface is an open-source project preview. Accounts, private data and calculations run on your **local backend**. GitHub Pages cannot run Python. Its sign-in button opens your local workspace and does not collect passwords on Pages.
+Users open the hosted workspace, create an account, choose a template or describe an idea, review the rules, and run research. They are not asked to supply a backend address, market files or provider keys. The browser uses the same server that serves the page. Data and API connections belong to the operator.
 
-## Start locally
+The app periodically discovers backend readiness and available stocks. Data-file updates are picked up automatically when files change; provider/environment changes require a backend restart. If research is not ready, users see a temporary service message, never setup forms or invented results. User choices such as strategy, dates, stocks and cost assumptions remain editable.
 
-1. Install **Python 3.12**. Download and extract this repository.
-2. In the extracted project folder, run:
+GitHub Pages is a static product preview only. It does not collect passwords, run Python or provide a hosted trading service. A working workspace requires deploying the backend and frontend together.
 
-   ```sh
-   python scripts/start.py
-   ```
+## Operator setup
 
-   Windows can use `py -3.12 scripts/start.py`.
-3. Open **http://127.0.0.1:8000**. Create an account and save the recovery code. Keep the terminal running.
+1. Install Python 3.12 and extract the repository.
+2. Copy `.env.example` to a private `.env` and configure the model connection.
+3. Put daily prices in `data/prices/` and Nifty 50 price-index data in `data/benchmark/`. Optional point-in-time fundamentals belong in `data/fundamentals/`.
+4. Verify split/bonus adjustment and dividend exclusion, then set `NIYAM_PRICE_BASIS=split_bonus_adjusted_ex_dividend` in `.env`.
+5. Run `python scripts/start.py` (Windows: `py -3.12 scripts/start.py`) and open `http://127.0.0.1:8000` for local development.
+6. Run `.venv/bin/python scripts/preflight.py --probe-model` before a real-data launch. Windows uses `.venv/Scripts/python.exe`.
 
-The launcher creates `.venv`, installs pinned dependencies and starts FastAPI on loopback. First installation requires internet; subsequent launches reuse the environment. Templates and account creation need no AI key. Actual backtests need your market files; free-form interpretation needs a configured model.
+Market data, keys and accounts ship empty. They are excluded from version control. Never place private data inside `web/`.
 
-## Two things to supply
+For an HTTPS deployment, use the [operator runbook](docs/DEPLOYMENT.md). The supported architecture is one backend process with persistent local SQLite storage behind a trusted TLS proxy. It is not a horizontally scaled service. The [audit record](docs/PRODUCTION_AUDIT.md) distinguishes verified code behaviour from outstanding deployment and real-provider checks.
 
-| Input | Location relative to the project folder |
-|---|---|
-| Daily equity OHLCV | `data/prices/` |
-| Nifty 50 **price index** | `data/benchmark/` |
-| Optional point-in-time fundamentals | `data/fundamentals/` |
-| Model, search and daily-feed connections | Copy `.env.example` to `.env` and fill the relevant values |
+## Features
 
-The three data directories ship empty apart from Git placeholders. Connection values are blank. Data, credentials, accounts and session state are excluded from Git. Keep them on your computer; do not upload them to the public repository.
+- Editable SMA, RSI and Donchian templates; structured rule editor; document attachments for text PDFs, DOCX, TXT and Markdown.
+- Configurable multilingual interpretation with schema validation, bounded repair, focused clarification and optional sourced reference lookup. No generated code execution.
+- Daily, long-only cash equities, up to 100 stocks, independent equal initial capital sleeves, whole shares, nested rules, lagged indicators and historical fundamentals.
+- Next-open execution; fixed/trailing percentage or ATR stops; percentage targets; fees and adverse slippage on both sides.
+- Return, CAGR, drawdown, volatility, Sharpe, win rate, trade ledger, monthly comparisons, CSV trades and JSON reports.
+- Bounded parameter search, training-only selection and a later holdout test.
+- Private account resources, HttpOnly browser sessions, hashed credentials and rotating recovery codes.
+- Optional backend feed and daily paper watches with duplicate-event protection. No broker orders, intraday alerts, email or webhooks.
 
-[Data format and feed contract](docs/DATA.md) · [Execution methodology](docs/METHOD.md) · [Audit and limits](docs/AUDIT.md) · [Deployment](docs/DEPLOYMENT.md) · [Research and reuse](docs/RESEARCH.md)
-
-## Included
-
-- Responsive strategy studio, editable SMA/RSI/Donchian templates, JSON rule editor and document attachments (text PDF, DOCX, TXT, Markdown).
-- Configurable multilingual model interpretation, schema validation and bounded repair, up to two focused clarification questions, optional reference lookup with sources. No generated code execution.
-- Daily, long-only Indian cash equities; up to 100 stocks in independent equal initial capital sleeves. Nested conditions, lagged indicators and point-in-time fundamentals.
-- Next-open trades; whole shares; fixed/trailing percentage or ATR stops; percentage targets; fees and adverse slippage on both sides.
-- Equity/drawdown charts, return, CAGR, volatility, Sharpe, trades, fees, monthly comparison and downloadable reports against Nifty 50 on matching dates.
-- Parameter search with a strict earlier training / later validation split. Selection never uses validation performance.
-- Local accounts, private strategies/reports, password hashing, hashed sessions and recovery codes.
-- Optional daily feed adapter and paper watches, with duplicate-event protection. No broker orders. Daily data does not support real-time intraday stop alerts.
-
-## Workflow
-
-```mermaid
-flowchart TD
-    A[Prompt and documents] --> B[Interpret into structured rules]
-    B --> C{Material ambiguity?}
-    C -->|Yes| D[Ask focused questions]
-    D --> B
-    C -->|No| E[User reviews rules]
-    F[Prices and Nifty 50 data] --> G[Validate and align]
-    E --> G
-    G --> H[Backtest daily bars]
-    G --> I[Train and select parameters]
-    I --> J[Evaluate frozen winner on holdout]
-    H --> K[Compare evidence with Nifty 50]
-    J --> K
-    K --> L[Optional paper watch]
-    M[New completed daily data] --> L
-```
-
-## Performance
-
-NumPy/pandas compute cached indicator arrays; Numba compiles the event loop to native machine code. Approximate work is `O(stocks × bars × expression work)` and `O(trials × stocks × bars × expression work)` for optimisation. Trial scoring skips full chart construction. First-call compilation takes longer than warmed runs.
-
-Reproduce the synthetic workload with `.venv/bin/python scripts/benchmark.py`; measured results and exclusions are in [BENCHMARK.json](docs/BENCHMARK.json). These are measurements of in-memory computation, not an end-to-end latency promise. The canonical dataset is currently held in RAM; vendor-specific parsing and large-data tuning await your files.
-
-## Verify
+## Verification
 
 ```sh
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
 npm ci --ignore-scripts
 npm test
+npx playwright install --with-deps chromium
+npm run test:browser
 ```
 
-Python tests include an independent Backtesting.py oracle for one matching execution case. DOM tests use jsdom; this does not substitute for visual/browser QA. GitHub Actions runs both suites on pushes.
+Browser tests start an isolated synthetic fixture with a test model endpoint. They do not contact a paid provider or represent investment performance. Set `NIYAM_TEST_PYTHON` if Python is outside `.venv/` (for example `python` in CI).
 
-This version does not implement intraday trading, shorting, derivatives, leverage, dynamic stock ranking or portfolio rebalancing. Unsupported essential rules must be clarified instead of silently approximated. No model can guarantee perfect interpretation of every ambiguous prompt; review the interpreted rules before running.
+CI runs Python tests on Linux and Windows, DOM checks, Linux Chromium flows, dependency scans, container smoke tests, backup restoration, and a production HTTPS proxy/backtest/session flow. See the current CI result before treating a release as passed.
+
+[Data contract](docs/DATA.md) · [Simulation method](docs/METHOD.md) · [Audit](docs/PRODUCTION_AUDIT.md) · [Security](SECURITY.md) · [Research](docs/RESEARCH.md)
+
+Unsupported: intraday trading, shorts, derivatives, leverage, cross-stock ranking and portfolio rebalancing. No interpretation or trading accuracy percentage is established. Review interpreted rules and validate the actual dataset and provider before relying on research.

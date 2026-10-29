@@ -62,13 +62,16 @@ def test_ai_repairs_schema_without_executing_generated_text(monkeypatch):
     monkeypatch.setenv('LLM_BASE_URL','https://example.com/v1');monkeypatch.setenv('LLM_MODEL','test-model')
     responses=['{"status":"ready","summary":"invalid","strategy":{"entry":{"op":"eval"}}}',json.dumps({'status':'ready','summary':'SMA crossover','strategy':template().model_dump(mode='json')})]
     class Reply:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
         def raise_for_status(self):pass
         def json(self):return {'choices':[{'message':{'content':responses.pop(0)}}]}
+        def iter_bytes(self):yield json.dumps(self.json()).encode()
     class Client:
         def __init__(self,**kwargs):pass
         def __enter__(self):return self
         def __exit__(self,*args):pass
-        def post(self,*args,**kwargs):return Reply()
+        def stream(self,*args,**kwargs):return Reply()
     monkeypatch.setattr(assistant.httpx,'Client',Client)
     out=assistant.interpret('20 50 SMA crossover',[],{'price_basis_confirmed':False})
     assert out['status']=='ready' and out['strategy']['entry']['op']=='cross_above'
