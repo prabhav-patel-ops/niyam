@@ -2,9 +2,9 @@
 'use strict';
 const ROOT=new URL('./',self.location.href);
 const PREFIX='niyam-review-app:'+ROOT.pathname+':';
-const CACHE=PREFIX+'20261113-v7';
+const CACHE=PREFIX+'20261114-v8';
 const SHELL=['./','index.html','deployment.js?v=review-20261113','templates.js?v=review-20261113',
- 'review-catalogue.js?v=review-20261113','review.js?v=review-20261113','app.js?v=identity-20261113',
+ 'review-catalogue.js?v=fundamentals-20261114','review.js?v=fundamentals-20261114','app.js?v=fundamentals-20261114',
  'style.css?v=identity-20261113','pwa.js?v=autoupdate-20261113','manifest.webmanifest?v=identity-20261113','favicon.svg?v=identity-20261113',
  'icons/niyam-mark-192.png','icons/niyam-mark-512.png','icons/niyam-maskable-512.png','icons/niyam-apple-180.png'];
 const ALLOWED=new Set(SHELL.map(path=>new URL(path,ROOT).pathname));

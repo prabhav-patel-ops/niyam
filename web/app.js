@@ -90,10 +90,10 @@ function toolboxRows(){
  <caption class="hidden">Strategy data and indicators with availability and historical dates</caption>
  <thead><tr><th scope="col">Data or rule</th><th scope="col">Availability</th><th scope="col" class="toolbox-dates">Source dates</th><th scope="col"><span class="hidden">Action</span></th></tr></thead>
  <tbody>${rows.length?rows.map(item=>`<tr>
- <td><strong>${esc(item.label)}</strong><code>@${esc(item.tag)}</code><small>${esc(item.description)}</small>${item.start&&item.end?`<small class="toolbox-mobile-dates">${esc(item.start)} to ${esc(item.end)}</small>`:''}</td>
- <td><span class="toolbox-status ${item.available?'ready':'pending'}">${item.available?'Ready':'Pending'}</span></td>
+ <td><strong>${esc(item.label)}</strong><code>@${esc(item.tag)}</code><small>${esc(item.description)}</small>${item.financial?`<small>Periods: ${esc(item.financial.frequencies.join(', ').replaceAll('_',' '))} · Units: ${esc(item.financial.units.map(unit=>unit==='unverified'?'as supplied':unit).join(', '))}</small>`:''}${item.start&&item.end?`<small class="toolbox-mobile-dates">${esc(item.start)} to ${esc(item.end)}</small>`:''}</td>
+ <td><span class="toolbox-status ${item.available?'ready':'pending'}">${item.available?(item.timing==='assumed_reporting_delay'?'Available · estimated dates':'Ready'):'Pending'}</span></td>
  <td class="toolbox-dates">${item.start&&item.end?`<span>${esc(item.start)}</span><span>to ${esc(item.end)}</span>`:item.available?'Check selected dates':'Awaiting requirements'}</td>
- <td><button class="button small ${item.available?'':'ghost'}" data-action="${item.available?'insert-reference':'reference-detail'}" data-reference="${esc(item.id)}" aria-label="${item.available?'Add @'+esc(item.tag)+' to strategy':'Why '+esc(item.label)+' is pending'}">${item.available?'+ Add':'Details'}</button></td>
+ <td><button class="button small ${item.available?'':'ghost'}" data-action="${item.available?'insert-reference':'reference-detail'}" data-reference="${esc(item.id)}" aria-label="${item.available?'Add @'+esc(item.tag)+' to strategy':'Why '+esc(item.label)+' is pending'}">${item.available?'+ Add':'Details'}</button>${item.financial?`<button class="text-button" data-action="reference-detail" data-reference="${esc(item.id)}">Timing</button>`:''}</td>
  </tr>`).join(''):'<tr><td colspan="4" class="toolbox-empty">No matching items. Try another search or include pending items.</td></tr>'}</tbody></table></div>
  <div class="toolbox-footer"><span>${items.length?first+1:0}–${Math.min(first+8,items.length)} of ${items.length.toLocaleString()} items</span>
  <div><button class="button small" data-action="toolbox-page" data-step="-1" ${state.toolboxPage===0?'disabled':''}>Previous</button>
@@ -103,7 +103,7 @@ function toolboxDetail(){
  const item=toolboxItem(state.toolboxDetail);
  if(!item)return '';
  return `<aside class="toolbox-detail" role="status"><div><strong>${esc(item.label)}</strong><p>${esc(item.reason||item.description)}</p>
- ${item.start?`<small>Source coverage ${esc(item.start)} to ${esc(item.end)}. Your exact stock list and dates are checked before a run.</small>`:''}</div>
+ ${item.financial?`<p>First usable date: ${esc(item.financial.usable_from)}. Latest update: ${esc(item.financial.last_update)}. Values carry forward until the next available observation; selected-stock coverage is checked before a run.</p>`:''}${item.start?`<small>Source coverage ${esc(item.start)} to ${esc(item.end)}. Your exact stock list and dates are checked before a run.</small>`:''}</div>
  <button class="icon-button" data-action="close-reference-detail" aria-label="Close item details">×</button></aside>`;
 }
 function dataInventory(){
@@ -117,11 +117,11 @@ function dataInventory(){
  <div class="toolbox-controls"><label class="toolbox-search">${icon('data')}<span class="hidden">Search strategy toolbox</span><input id="toolboxSearch" type="search" value="${esc(state.toolboxQuery||'')}" placeholder="Search ROE, EPS, prices, RSI, stocks…" autocomplete="off"></label>
  <label class="toolbox-pending"><input id="toolboxPending" type="checkbox" ${state.toolboxPending?'checked':''}> Include ${pending} pending items</label></div>
  <div class="toolbox-tabs" role="group" aria-label="Toolbox categories">${categories.map(([id,label])=>`<button data-action="toolbox-category" data-category="${id}" aria-pressed="${(state.toolboxCategory||'all')===id}">${label}</button>`).join('')}</div>
- <p class="toolbox-financial-note">Fundamental fields are listed even while pending. Imported values need verified publication dates before historical strategy use.</p><div id="toolboxResults">${toolboxRows()}</div><div id="toolboxDetail">${toolboxDetail()}</div>
+ ${data.fundamental_availability?`<div class="notice amber toolbox-financial-note"><strong>Fundamentals available · estimated reporting dates</strong><p>${esc(data.fundamental_availability.timing_note)}</p><p>Values retain their supplied units and statement basis. Use Timing beside a field for its frequency and dates.</p></div>`:'<p class="toolbox-financial-note">Fundamental fields are listed even while pending. Imported values need verified publication dates or an explicitly chosen reporting-delay policy before historical strategy use.</p>'}<div id="toolboxResults">${toolboxRows()}</div><div id="toolboxDetail">${toolboxDetail()}</div>
  <details class="toolbox-about"><summary>About coverage and imported financial data</summary>
  <p>Source dates show the outer data window. Individual histories can contain gaps. Niyam checks every required stock and session before a backtest.</p>
  <p>Nifty 50 price benchmark · ${esc(data.benchmark_start)} to ${esc(data.benchmark_end)}.</p>
- ${data.source_archive?`<p>${data.source_archive.financial_observations.toLocaleString()} financial values are imported. ${data.source_archive.dated_financial_observations.toLocaleString()} have verified publication dates. Pending fields become usable when their requirements are met.</p>`:''}
+ ${REVIEW_MODE?'<p>Public app review: private financial rows stay on your backend. This sample catalogue shows available fields and their timing policy.</p>':data.source_archive?`<p>${data.source_archive.financial_observations.toLocaleString()} financial values are imported. ${data.source_archive.dated_financial_observations.toLocaleString()} have verified publication dates. Available fields use the policy shown above; remaining fields show their specific requirements.</p>`:''}
  </details></section>`;
 }
 function renderToolbox(){
@@ -246,7 +246,7 @@ function coveragePanel(){
  ${c.missing_bars?`<p>${c.missing_bars.toLocaleString()} required price bars are missing across ${c.affected_stocks} stocks.</p>`:''}
  ${!c.ready&&c.ranges.length?`<p>Complete price coverage for this stock selection</p><div class="action-row">${c.ranges.map((r,i)=>`<button class="button small" data-action="use-covered-range" data-index="${i}">${esc(r.start)} to ${esc(r.end)} · ${r.sessions} sessions</button>`).join('')}</div>`:''}
  ${!c.ready&&!c.ranges.length?'<p class="subtext">Market-data preparation is required for this selection. You can revise the stocks or check another period.</p>':''}
- ${c.issues.length?`<details><summary>Coverage details for ${c.issues.length} findings</summary><ul class="detail-list">${c.issues.map(i=>`<li>${esc(i.symbol)} · ${i.count} ${i.kind==='missing_prices'?'missing bars':'unmatched sessions'} · ${esc(i.first_date)} to ${esc(i.last_date)}</li>`).join('')}</ul></details>`:''}
+ ${c.issues.length?`<details><summary>Coverage details for ${c.issues.length} findings</summary><ul class="detail-list">${c.issues.map(i=>`<li>${esc(i.symbol)} · ${i.count} ${i.kind==='missing_prices'?'missing bars':i.kind==='missing_fundamentals'?'missing '+i.field.toUpperCase()+' observations':'unmatched sessions'} · ${esc(i.first_date)} to ${esc(i.last_date)}</li>`).join('')}</ul></details>`:''}
  </div></section>`;
 }
 async function checkCoverage(){
