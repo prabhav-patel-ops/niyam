@@ -84,3 +84,32 @@ kbd{font:inherit;font-weight:600;border:1px solid #d7e0d2;border-radius:4px;padd
 [hidden]{display:none!important}.app-install{margin:20px 42px 0;padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:10px}.app-install-row{display:flex;align-items:center;gap:10px}.app-install-row img{border-radius:10px;flex-shrink:0}.app-install-row>div{flex:1;min-width:0}.app-install strong{font-size:12px}.app-install small{display:block;color:var(--muted);font-size:10px;margin-top:4px;line-height:1.5}.app-install p{font-size:13px;line-height:1.7;margin:15px 0 0}.app-update{margin:16px 18px;padding:12px;background:#edf3e7;border-radius:8px}.mobile-app-nav{display:none}.app-review .sidebar{padding-top:max(35px,env(safe-area-inset-top))}
 @media(max-width:700px){.app-install{margin:16px 18px 0;padding:12px}.app-install-row{gap:8px}.app-install-row .button{padding:10px;font-size:11px}.app-install-row .icon-button{width:22px;flex-shrink:0}.app-install-row img{width:36px;height:36px}.app-review .mobile-app-nav{position:fixed;display:flex;justify-content:space-around;align-items:stretch;bottom:0;left:0;right:0;padding:5px 8px max(7px,env(safe-area-inset-bottom));background:#fafcf8;border-top:1px solid #dce5d9;z-index:30;box-shadow:0 -3px 18px #142f2708}.mobile-app-nav a,.mobile-app-nav button{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:48px;border:0;border-radius:8px;background:none;font-size:11px;color:#73817b}.mobile-app-nav span{font-size:19px;line-height:22px}.mobile-app-nav a[aria-current=page]{background:#edf3e7;color:#285b45;font-weight:650}.app-review .workspace{padding-bottom:calc(73px + env(safe-area-inset-bottom))}.app-review .toast{bottom:calc(85px + env(safe-area-inset-bottom))}.app-review .topbar{padding-top:env(safe-area-inset-top);height:calc(65px + env(safe-area-inset-top))}.app-review .sidebar{padding-bottom:calc(85px + env(safe-area-inset-bottom));overflow-y:auto;z-index:40}.app-review main{min-height:calc(100dvh - 150px)}}
 @media(display-mode:standalone){.app-review .topbar{position:sticky;top:0;z-index:15}.app-review #appInstall{display:none}}
+
+/* A compact, usable research workspace on phones. */
+.strategy-card-label{display:block;margin-bottom:9px;color:#6e8a72;font-size:9px;font-weight:700;letter-spacing:1.1px}
+.strategy-list-card{border-radius:12px;box-shadow:0 5px 20px #193b2c08}
+.strategy-list-card h3{font-size:15px;color:#19372b}
+.strategy-list-card p{overflow-wrap:anywhere}
+@media(max-width:700px){
+ .app-review .mobile-app-nav{flex-direction:row;gap:2px;align-items:center;min-height:64px;padding:7px 8px max(7px,env(safe-area-inset-bottom));background:rgba(250,252,248,.97);box-shadow:0 -5px 24px #183b2d12}
+ .mobile-app-nav a,.mobile-app-nav button{min-width:0;min-height:49px;gap:4px;font-size:10px;line-height:1.1;text-decoration:none}
+ .mobile-app-nav svg{width:21px;height:21px;flex:none}
+ .app-review .workspace{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+ .app-review .topbar{padding-left:16px;padding-right:16px}
+ .breadcrumbs{min-width:0;flex:1}.breadcrumbs strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+ .connection-badge{font-size:10px;white-space:nowrap}
+ .top-actions .button{font-size:11px;padding:9px 10px}
+ main{padding:22px 18px 16px}
+ .review-banner{margin-bottom:23px;padding:12px 14px;border-radius:10px;line-height:1.5}
+ .hero{display:flex;flex-direction:column;gap:16px;margin-bottom:22px}
+ .hero h1{font-size:clamp(29px,8vw,36px);line-height:1.1;margin-bottom:10px}
+ .hero p{font-size:13px;line-height:1.6}
+ .hero .button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;font-size:12px}
+ .strategy-list-card{padding:19px;gap:16px}
+ .strategy-list-card h3{font-size:16px;line-height:1.35;margin-bottom:8px}
+ .strategy-list-card p{font-size:12px;line-height:1.6}
+ .strategy-list-card .list-actions{border-top:1px solid #edf1eb;padding-top:14px;justify-content:space-between}
+ .strategy-list-card .list-actions .button{min-height:42px;padding:10px 14px;font-size:12px}
+ .strategy-list-card .icon-button{min-width:42px;min-height:42px}
+}
+@media(max-width:390px){.connection-badge{font-size:0}.connection-badge .dot{width:8px;height:8px}.top-actions .button{padding:8px}.breadcrumbs strong{font-size:12px}}

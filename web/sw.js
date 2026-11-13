@@ -2,10 +2,10 @@
 'use strict';
 const ROOT=new URL('./',self.location.href);
 const PREFIX='niyam-review-app:'+ROOT.pathname+':';
-const CACHE=PREFIX+'20261113-v1';
+const CACHE=PREFIX+'20261113-v2';
 const SHELL=['./','index.html','deployment.js?v=review-20261113','templates.js?v=review-20261113',
- 'review-catalogue.js?v=review-20261113','review.js?v=review-20261113','app.js?v=app-20261113',
- 'style.css?v=app-20261113','pwa.js?v=app-20261113','manifest.webmanifest','favicon.svg',
+ 'review-catalogue.js?v=review-20261113','review.js?v=review-20261113','app.js?v=mobile-20261113',
+ 'style.css?v=mobile-20261113','pwa.js?v=app-20261113','manifest.webmanifest','favicon.svg',
  'icons/icon-192.png','icons/icon-512.png','icons/maskable-512.png','icons/apple-touch-icon.png'];
 const ALLOWED=new Set(SHELL.map(path=>new URL(path,ROOT).pathname));
 self.addEventListener('install',event=>{
