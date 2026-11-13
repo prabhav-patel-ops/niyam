@@ -1,1 +1,10 @@
-{"name":"niyam","private":true,"scripts":{"test":"node tests/ui.cjs"},"devDependencies":{"jsdom":"26.1.0"}}
+{
+  "name": "niyam",
+  "private": true,
+  "scripts": {
+    "test": "node tests/ui.cjs && node tests/review.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
