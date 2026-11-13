@@ -29,7 +29,7 @@ function request(path,mode='cors',method='GET'){
  await life('activate');assert.ok(claimed);assert.ok(!buckets.has('niyam-review-app:/niyam/:old'));assert.ok(buckets.has('niyam-review-app:/another-app/:old'));assert.ok(buckets.has('private-account-cache'));
  online=false;
  const shell=await request('/niyam/','navigate').promise;assert.ok((await shell.text()).includes('manifest.webmanifest'));
- for(const file of ['app.js?v=design-20261113','review.js?v=review-20261113','pwa.js?v=autoupdate-20261113','icons/apple-touch-icon.png'])assert.ok((await request('/niyam/'+file).promise).ok,'offline asset '+file);
+ for(const file of ['app.js?v=desk-20261113','review.js?v=review-20261113','pwa.js?v=autoupdate-20261113','icons/apple-touch-icon.png'])assert.ok((await request('/niyam/'+file).promise).ok,'offline asset '+file);
  assert.equal(request('/niyam/api/paper').handled,false);
  assert.equal(request('/niyam/private.json').handled,false);
  assert.equal(request('/outside/','navigate').handled,false);

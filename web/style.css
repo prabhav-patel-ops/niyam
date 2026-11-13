@@ -199,3 +199,48 @@ body{background:var(--paper)}
 .prompt-card:focus-within{border-color:#a9c8ae;box-shadow:0 12px 35px #193c2712,0 0 0 3px #a8cbb524}
 @media(hover:hover){.icon-button:hover,.mobile-app-nav a:hover,.mobile-app-nav button:hover{background:#e8f0e7;color:#245c45}.button:hover svg,.template-card:hover .template-arrow{transform:translateX(3px)}.button svg,.template-arrow{transition:transform .2s ease}}
 @media(prefers-reduced-motion:reduce){.button,.icon-button,.mobile-menu,.sidebar-help,.attachment-button,.text-button,.nav-link,.mobile-app-nav a,.mobile-app-nav button,.setup-item,.template-card,.toolbox-tabs button,.result-tab,.question-options button,.field input,.field select,.field textarea,.toolbox-search,.prompt-card,.button svg,.template-arrow{transition:none!important}.button:active:not(:disabled),.icon-button:active:not(:disabled),.mobile-menu:active,.sidebar-help:active,.attachment-button:active,.text-button:active,.nav-link:active,.mobile-app-nav a:active,.mobile-app-nav button:active,.setup-item:active,.template-card:active,.toolbox-tabs button:active,.result-tab:active,.question-options button:active{transform:none}}
+
+/* Niyam research desk: warm surfaces, deep green and one clear focal action. */
+:root{--paper:#f5f4ee;--ink:#183b2f;--muted:#586e63;--line:#dce4dc;--green:#1c5a43;--deep:#102c23;--pale:#eaf1e5;--shadow:0 14px 40px rgba(23,52,35,.075)}
+body{background:var(--paper);color:var(--ink)}
+.workspace{background:radial-gradient(ellipse at 85% 0%,#e6eddf 0,transparent 34%),var(--paper)}
+.sidebar{background:linear-gradient(160deg,#183e2e,#0d2b21 80%);border-right:1px solid #315746}
+.brand{color:#f0f5e9}.brandmark{border-color:#b6d3aa}.brandmark span{background:#183e2e}
+.workspace-label{color:#bed0c0}.nav-link{color:#d0dfd4}.nav-link.active{background:#d9eac7;color:#123e2a;font-weight:700}
+.topbar{background:rgba(250,250,245,.96);border-color:#dfe6db}.breadcrumbs{font-size:12px;color:#667c6e}.breadcrumbs strong{color:#193b2b;font-weight:700}
+.top-actions .button.dark{background:#173f30;border-color:#173f30;border-radius:10px}
+main{max-width:1510px;padding-top:32px}
+.review-banner{background:#fff9ea;border:1px solid #e6d7b2;border-left:3px solid #bd9a4d;color:#594a28;padding:12px 16px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:20px;box-shadow:0 3px 10px #75642d08}
+.review-banner strong{font-size:12px;color:#584a29}
+.studio-hero{position:relative;min-height:216px;display:flex;align-items:center;overflow:hidden;padding:33px 38px;margin-bottom:20px;border:1px solid #3d614b;border-radius:18px;color:#f9faf4;background:radial-gradient(circle at 80% 22%,#52745b 0,transparent 28%),linear-gradient(120deg,#173f2f,#0e2b22 77%);box-shadow:0 16px 40px #173c291e}
+.studio-hero:before{content:'';position:absolute;width:400px;height:400px;right:8%;top:-210px;border:1px solid #d2e7bd1c;border-radius:50%;box-shadow:0 0 0 42px #d2e7bd08,0 0 0 84px #d2e7bd08}
+.studio-hero-copy{position:relative;z-index:1;max-width:620px}
+.studio-kicker{display:flex;align-items:center;gap:8px;color:#c4dcae;font-size:10px;font-weight:700;letter-spacing:1.45px}
+.studio-kicker span{width:7px;height:7px;border-radius:50%;background:#c6ddad}.studio-kicker i{font-style:normal;color:#7ba185}
+.studio-hero h1{margin:14px 0 10px;font:400 clamp(35px,3.3vw,49px)/1.06 Georgia,serif;letter-spacing:-1.5px;color:#fffdf6}.studio-hero h1 em{font-weight:400;color:#c7ddac}
+.studio-hero p{max-width:490px;margin:0;color:#d5e3d6;font-size:13px;line-height:1.6}
+.studio-guide{display:inline-flex;align-items:center;gap:8px;margin-top:17px;padding:0;border:0;background:transparent;color:#e3f1d0;font-size:12px;font-weight:700}.studio-guide svg{width:16px;height:16px;transition:transform .2s}.studio-guide:hover svg{transform:translateX(4px)}
+.studio-hero-art{position:absolute;right:4%;top:0;bottom:0;display:grid;place-items:center;width:min(36%,340px);opacity:.84;pointer-events:none}.studio-hero-art svg{width:100%;max-height:195px}.studio-hero-index{position:absolute;right:24px;bottom:18px;color:#b6cfb4;font-size:9px;letter-spacing:1.2px}
+.studio-grid{gap:18px}.card,.list-card,.metric{background:#fffefb;border:1px solid #dce5dc;box-shadow:0 9px 30px #2546320c}.card{border-radius:16px}.card-head{border-color:#e9eee7}
+.prompt-card{border-color:#c8d9ca;box-shadow:0 15px 38px #173e2914}.prompt-card .card-head{padding:18px 22px;background:#fbfcf8}.prompt-label{font-size:15px;font-weight:700;color:#173d2b}.prompt-label svg{width:19px;height:19px;color:#507b52}.language-badge{color:#536c56;background:#edf4e9;border-color:#dbe9d7;font-size:10px;font-weight:700}
+.prompt-wrap{padding:22px 23px 12px}.prompt-wrap textarea{font-size:15px;line-height:1.7;min-height:126px;color:#1b3b2b}.prompt-wrap textarea::placeholder{color:#829287}.prompt-hint{font-size:11px;color:#63796a;line-height:1.6}
+.prompt-footer{background:#fbfcf8;border-color:#ebf0e8}.attachment-button{color:#486c54;font-size:12px;font-weight:650;min-height:44px}.button{border-radius:10px;min-height:40px;font-size:12px}.button.primary{background:#1c5a43;border-color:#1c5a43;color:#fff}.button.primary:hover{background:#164b37}.prompt-footer .button{min-height:45px;padding:11px 18px}
+.research-card{padding:23px;background:#eaf1e5;border-color:#dce8d9}.research-card .kicker{color:#587355;font-weight:700}.research-card h3{font-size:27px;color:#254a33}.research-row{color:#60755e;font-size:12px}.research-row strong{color:#254330;font-weight:700}.research-note{color:#60745f;font-size:11px}
+.section-heading h2{font-size:17px;color:#1c3f2e}.section-heading span{color:#63776a;font-size:11px}.template-card{background:#fffefb;border-radius:14px;border-color:#dbe5dc}.template-card h3{font-size:14px;color:#1e3f2d}.template-card p{color:#61756a;font-size:12px}.template-icon{background:#e9f2e5;color:#41704d}.template-tag{color:#627c65;font-weight:700}.template-arrow{color:#376a45;font-size:16px}
+.hero h1,.page-title{color:#193b2b}.hero p,.subtext{color:#607468}.list-card h3{font-weight:700}.strategy-card-label{color:#56765a}.list-card p{color:#5f7369}.field{color:#4b6654;font-weight:650}.field input,.field select,.field textarea,.input{border-color:#ccdcd0;border-radius:8px;min-height:42px}.metric{border-radius:14px}.toolbox-table th{color:#536b5c}.toolbox-table td small,.toolbox-pending,.toolbox-about{color:#5d7265}.toolbox-status.pending{background:#fff2db;color:#79530f}.toolbox-status.ready{background:#e4f2e5;color:#285c36}
+.app-install{background:#fffefb;border-color:#dbe5dc;border-radius:12px}.app-install small{color:#61766a}.footer{color:#6d8070}
+@media(max-width:700px){
+ .topbar{height:58px;padding:0 14px}.app-review .topbar{height:calc(58px + env(safe-area-inset-top));padding-left:14px;padding-right:14px}.mobile-menu{min-width:44px;min-height:44px}.breadcrumbs{gap:5px}.breadcrumbs strong{font-size:13px}.top-actions .button{min-height:40px;font-size:11px}
+ .app-install{margin:12px 14px 0;padding:10px 12px}.app-install strong{font-size:12px}.app-install small{font-size:10px}.app-install-row .button{min-height:40px}
+ main{padding:16px 14px 18px}.review-banner{margin-bottom:14px;padding:10px 12px;font-size:11px;line-height:1.45}.review-banner strong{font-size:12px}
+ .studio-hero{min-height:150px;padding:19px 18px;margin-bottom:14px;border-radius:15px;align-items:flex-start}.studio-hero:before{width:220px;height:220px;right:-20%;top:-110px}.studio-hero-copy{max-width:78%}.studio-kicker{font-size:8px;gap:5px;letter-spacing:1px}.studio-kicker span{width:5px;height:5px}.studio-hero h1{font-size:clamp(27px,7.5vw,34px);letter-spacing:-1px;margin:11px 0 8px}.studio-hero p{font-size:11px;line-height:1.45;max-width:260px}.studio-guide{font-size:11px;margin-top:10px;min-height:28px}.studio-hero-art{right:-10%;width:48%;opacity:.55}.studio-hero-index{display:none}
+ .prompt-card .card-head{padding:14px 16px;gap:8px}.prompt-label{font-size:13px}.language-badge{font-size:8px;white-space:nowrap}.prompt-wrap{padding:16px 16px 10px}.prompt-wrap textarea{min-height:100px;font-size:16px}.prompt-hint{font-size:11px}.prompt-footer{padding:10px 16px;gap:6px}.prompt-footer .button{font-size:12px;min-height:44px}
+ .section-heading h2{font-size:15px}.template-card{padding:16px}.template-card h3{font-size:13px}.template-card p{font-size:12px}.template-icon{width:40px;height:40px}
+ .toolbox-tabs button{min-height:40px;font-size:12px}.toolbox-table td strong{font-size:12px}.toolbox-table td small{font-size:11px}.toolbox-table .button.small{min-height:44px}.toolbox-status{font-size:10px}.strategy-toolbox .card-head p{font-size:12px}.toolbox-financial-note{font-size:12px}
+ .app-review .mobile-app-nav{min-height:64px;padding:6px 8px max(7px,env(safe-area-inset-bottom));background:rgba(251,252,247,.98);border-color:#d8e2d8}.mobile-app-nav a,.mobile-app-nav button{min-height:48px;font-size:10px;color:#60776b}.mobile-app-nav a[aria-current=page]{background:#dfedda;color:#174b32}
+}
+@media(max-width:360px){.studio-hero-copy{max-width:84%}.studio-hero-art{right:-15%;width:47%;opacity:.43}.studio-kicker{letter-spacing:.7px}.prompt-card .card-head{align-items:flex-start;flex-wrap:wrap}.connection-badge{font-size:0}.top-actions .button{padding:8px}.toolbox-table th,.toolbox-table td{padding-left:6px;padding-right:6px}}
+@media(prefers-reduced-motion:reduce){.studio-guide svg{transition:none}.studio-guide:hover svg{transform:none}}
+/* Keep the guide comfortable to tap without extending the hero layout. */
+.studio-guide{position:relative;min-height:44px;margin-top:8px}
+@media(max-width:700px){.studio-guide{min-height:44px;margin-top:2px;margin-bottom:-8px}}
