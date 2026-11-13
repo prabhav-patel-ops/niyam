@@ -2,11 +2,11 @@
 'use strict';
 const ROOT=new URL('./',self.location.href);
 const PREFIX='niyam-review-app:'+ROOT.pathname+':';
-const CACHE=PREFIX+'20261113-v6';
+const CACHE=PREFIX+'20261113-v7';
 const SHELL=['./','index.html','deployment.js?v=review-20261113','templates.js?v=review-20261113',
- 'review-catalogue.js?v=review-20261113','review.js?v=review-20261113','app.js?v=desk-20261113',
- 'style.css?v=desk-20261113','pwa.js?v=autoupdate-20261113','manifest.webmanifest','favicon.svg',
- 'icons/icon-192.png','icons/icon-512.png','icons/maskable-512.png','icons/apple-touch-icon.png'];
+ 'review-catalogue.js?v=review-20261113','review.js?v=review-20261113','app.js?v=identity-20261113',
+ 'style.css?v=identity-20261113','pwa.js?v=autoupdate-20261113','manifest.webmanifest?v=identity-20261113','favicon.svg?v=identity-20261113',
+ 'icons/niyam-mark-192.png','icons/niyam-mark-512.png','icons/niyam-maskable-512.png','icons/niyam-apple-180.png'];
 const ALLOWED=new Set(SHELL.map(path=>new URL(path,ROOT).pathname));
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL.map(path=>new Request(new URL(path,ROOT),{cache:'reload'})))).then(()=>self.skipWaiting()));

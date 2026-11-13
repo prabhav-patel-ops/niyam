@@ -33,7 +33,7 @@ function make(preview,ready=false){
  const p=make(preview);await tick();
  check(p.doc.querySelector('h1').textContent.includes('Every strategy'),'studio renders');
  check(p.doc.querySelector('.language-badge').textContent.includes('\u0939\u093f\u0902\u0926\u0940'),'Hindi label renders as Unicode');
- check(p.doc.querySelector('#authButton').textContent.includes('↗'),'navigation arrow has no encoding corruption');
+ check(!p.doc.querySelector('#authButton').textContent.includes('↗'),'sign-in label uses the arrow-free mark');
  check(!p.doc.querySelector('[href="#data"]'),'no operator setup navigation');
  check(!p.doc.querySelector('.setup-strip,#backendUrl,#connectionForm'),'no backend setup controls');
  check(p.w.sessionStorage.getItem('niyam.backend')===null,'legacy foreign backend cleared');

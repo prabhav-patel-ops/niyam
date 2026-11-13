@@ -244,3 +244,6 @@ main{max-width:1510px;padding-top:32px}
 /* Keep the guide comfortable to tap without extending the hero layout. */
 .studio-guide{position:relative;min-height:44px;margin-top:8px}
 @media(max-width:700px){.studio-guide{min-height:44px;margin-top:2px;margin-bottom:-8px}}
+/* A single, arrow-free monogram for Niyam. */
+.brandmark{display:grid;place-items:center;padding:0;line-height:normal}
+.brandmark svg{display:block;width:31px;height:31px;color:#d8eac5}
