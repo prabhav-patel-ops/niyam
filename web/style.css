@@ -183,3 +183,19 @@ body{background:var(--paper)}
 }
 @media(max-width:370px){.market-motif-copy strong{font-size:19px}.market-art{width:43%;right:-4%}.market-motif-copy p{max-width:150px}}
 @media(prefers-reduced-motion:reduce){.market-trace{stroke-dashoffset:0;animation:none}.bull-mark{animation:none}.button:hover,.nav-link:hover{transform:none}}
+
+/* Small, tactile feedback for every part of the research workspace. */
+.button,.icon-button,.mobile-menu,.sidebar-help,.attachment-button,.text-button,.nav-link,.mobile-app-nav a,.mobile-app-nav button,.setup-item,.template-card,.toolbox-tabs button,.result-tab,.question-options button{
+ transition:transform .16s cubic-bezier(.2,.7,.2,1),background-color .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease;
+}
+.button:active:not(:disabled),.icon-button:active:not(:disabled),.mobile-menu:active,.sidebar-help:active,.attachment-button:active,.text-button:active,.nav-link:active,.mobile-app-nav a:active,.mobile-app-nav button:active,.setup-item:active,.template-card:active,.toolbox-tabs button:active,.result-tab:active,.question-options button:active{
+ transform:scale(.96);transition-duration:.08s;
+}
+.button.primary:active:not(:disabled),.button.dark:active:not(:disabled){box-shadow:inset 0 3px 8px #10291d35}
+.template-card:active{box-shadow:0 3px 12px #193c2714}
+.mobile-app-nav a:active,.mobile-app-nav button:active{background:#e4efe0}
+.field input,.field select,.field textarea,.toolbox-search,.prompt-card{transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease}
+.field input:focus,.field select:focus,.field textarea:focus,.toolbox-search:focus-within{box-shadow:0 0 0 3px #92b49a35}
+.prompt-card:focus-within{border-color:#a9c8ae;box-shadow:0 12px 35px #193c2712,0 0 0 3px #a8cbb524}
+@media(hover:hover){.icon-button:hover,.mobile-app-nav a:hover,.mobile-app-nav button:hover{background:#e8f0e7;color:#245c45}.button:hover svg,.template-card:hover .template-arrow{transform:translateX(3px)}.button svg,.template-arrow{transition:transform .2s ease}}
+@media(prefers-reduced-motion:reduce){.button,.icon-button,.mobile-menu,.sidebar-help,.attachment-button,.text-button,.nav-link,.mobile-app-nav a,.mobile-app-nav button,.setup-item,.template-card,.toolbox-tabs button,.result-tab,.question-options button,.field input,.field select,.field textarea,.toolbox-search,.prompt-card,.button svg,.template-arrow{transition:none!important}.button:active:not(:disabled),.icon-button:active:not(:disabled),.mobile-menu:active,.sidebar-help:active,.attachment-button:active,.text-button:active,.nav-link:active,.mobile-app-nav a:active,.mobile-app-nav button:active,.setup-item:active,.template-card:active,.toolbox-tabs button:active,.result-tab:active,.question-options button:active{transform:none}}
