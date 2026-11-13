@@ -34,19 +34,24 @@ if(window.NIYAM_PUBLIC_PREVIEW&&window.NIYAM_REVIEW_MODE){
   function status(){offline.textContent=navigator.onLine?'Preparing offline access…':'Offline · open once online to download the app';}
   status();
   if('serviceWorker' in navigator&&window.isSecureContext){
+   // Reload once when an existing controller is replaced. First installation does not reload.
+   const hadController=!!navigator.serviceWorker.controller;
+   let reloading=false;
+   navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(hadController&&!reloading){reloading=true;location.reload();}
+   });
    navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'}).then(async registration=>{
     await navigator.serviceWorker.ready;
     function connection(){offline.textContent=navigator.onLine?'Ready for offline review':'Offline · sample review available';}
     connection();window.addEventListener('online',connection);window.addEventListener('offline',connection);
-    function updateReady(){
-     if(!registration.waiting)return;
-     const update=document.querySelector('#appUpdate');update.hidden=false;
-     update.querySelector('button').onclick=()=>{registration.waiting.postMessage({type:'ACTIVATE_UPDATE'});};
-    }
-    updateReady();
-    registration.addEventListener('updatefound',()=>registration.installing?.addEventListener('statechange',updateReady));
-    let reloading=false;
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(registration.waiting===null&&document.querySelector('#appUpdate').hidden===false&&!reloading){reloading=true;location.reload();}});
+    // Also activate any older waiting worker left over from a previous app version.
+    function activateWaiting(){if(registration.waiting)registration.waiting.postMessage({type:'ACTIVATE_UPDATE'});}
+    function checkForUpdate(){if(navigator.onLine)registration.update().catch(()=>{});}
+    activateWaiting();
+    registration.addEventListener('updatefound',()=>registration.installing?.addEventListener('statechange',activateWaiting));
+    window.addEventListener('online',checkForUpdate);
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkForUpdate();});
+    setInterval(checkForUpdate,5*60*1000);
    }).catch(()=>{offline.textContent='Online preview · offline download unavailable. Retry with a normal browser tab.';});
   }else offline.textContent='Open the HTTPS link in Safari or Chrome to install.';
  })();

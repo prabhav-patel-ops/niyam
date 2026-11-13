@@ -24,12 +24,12 @@ function request(path,mode='cors',method='GET'){
  return {handled,promise};
 }
 (async()=>{
- await life('install');
+ await life('install');assert.ok(skipped,'new app versions activate after caching');skipped=false;
  buckets.set('niyam-review-app:/niyam/:old',new Map());buckets.set('niyam-review-app:/another-app/:old',new Map());buckets.set('private-account-cache',new Map());
  await life('activate');assert.ok(claimed);assert.ok(!buckets.has('niyam-review-app:/niyam/:old'));assert.ok(buckets.has('niyam-review-app:/another-app/:old'));assert.ok(buckets.has('private-account-cache'));
  online=false;
  const shell=await request('/niyam/','navigate').promise;assert.ok((await shell.text()).includes('manifest.webmanifest'));
- for(const file of ['app.js?v=design-20261113','review.js?v=review-20261113','pwa.js?v=app-20261113','icons/apple-touch-icon.png'])assert.ok((await request('/niyam/'+file).promise).ok,'offline asset '+file);
+ for(const file of ['app.js?v=design-20261113','review.js?v=review-20261113','pwa.js?v=autoupdate-20261113','icons/apple-touch-icon.png'])assert.ok((await request('/niyam/'+file).promise).ok,'offline asset '+file);
  assert.equal(request('/niyam/api/paper').handled,false);
  assert.equal(request('/niyam/private.json').handled,false);
  assert.equal(request('/outside/','navigate').handled,false);
@@ -45,6 +45,13 @@ function request(path,mode='cors',method='GET'){
  assert.ok(w.document.querySelector('#installHelp').textContent.includes('Add to Home Screen'));
  assert.equal(w.document.querySelector('#mobileAppNav').hidden,false);
  w.close();
+ const updateDom=new JSDOM(fs.readFileSync('web/index.html','utf8'),{url:'https://example.com/niyam/',runScripts:'outside-only'}),uw=updateDom.window;
+ uw.NIYAM_PUBLIC_PREVIEW=true;uw.NIYAM_REVIEW_MODE=true;uw.matchMedia=()=>({matches:false});Object.defineProperty(uw,'isSecureContext',{value:true});
+ let activationMessage,updateChecks=0;const registration={waiting:{postMessage:message=>activationMessage=message},addEventListener(){},update(){updateChecks++;return Promise.resolve();}};
+ Object.defineProperty(uw.navigator,'serviceWorker',{value:{controller:{},register:async()=>registration,ready:Promise.resolve(registration),addEventListener(){}}});
+ uw.eval(fs.readFileSync('web/pwa.js','utf8'));await new Promise(resolve=>setTimeout(resolve,0));
+ assert.equal(activationMessage.type,'ACTIVATE_UPDATE','waiting update activates without a button');
+ uw.dispatchEvent(new uw.Event('online'));assert.equal(updateChecks,1,'returning online checks for updates');uw.close();
  const local=new JSDOM(fs.readFileSync('web/index.html','utf8'),{runScripts:'outside-only'});local.window.eval(fs.readFileSync('web/pwa.js','utf8'));assert.equal(local.window.document.querySelector('#appInstall').hidden,true);local.window.close();
  console.log('App checks passed: manifest, offline shell/assets, private-data exclusions, scoped cache updates, iPhone install instructions and local-backend isolation.');
 })().catch(e=>{console.error(e);process.exitCode=1});
