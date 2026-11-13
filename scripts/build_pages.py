@@ -12,6 +12,6 @@ if out==root or root in out.parents:
 if out.exists():
     raise SystemExit('Output directory already exists; choose a new empty path.')
 shutil.copytree(root/'web',out)
-(out/'deployment.js').write_text('window.NIYAM_PUBLIC_PREVIEW=true;\n')
+(out/'deployment.js').write_text('window.NIYAM_PUBLIC_PREVIEW=true;\nwindow.NIYAM_REVIEW_MODE=true;\n')
 (out/'.nojekyll').touch()
 print(out)

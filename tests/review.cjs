@@ -1,0 +1,46 @@
+const {JSDOM,VirtualConsole}=require('jsdom');
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const errors=[];const vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));
+const dom=new JSDOM(fs.readFileSync('web/index.html','utf8'),{url:'https://prabhav-patel-ops.github.io/niyam/',runScripts:'outside-only',virtualConsole:vc});
+const w=dom.window;let requests=0;
+w.NIYAM_PUBLIC_PREVIEW=true;w.NIYAM_REVIEW_MODE=true;
+w.fetch=()=>{requests++;throw Error('Review mode must never request a backend')};
+w.HTMLElement.prototype.scrollIntoView=()=>{};w.confirm=()=>true;
+for(const f of ['templates.js','review-catalogue.js','review.js'])w.eval(fs.readFileSync('web/'+f,'utf8'));
+w.eval(fs.readFileSync('web/app.js','utf8')+'\nwindow.reviewAudit={state,actions,render,route,run,api,runInterpret};');
+const a=w.reviewAudit;const tick=()=>new Promise(r=>setTimeout(r,30));
+(async()=>{
+ await tick();
+ assert.ok(w.document.querySelector('.review-banner').textContent.includes('sample data'));
+ assert.ok(w.document.querySelector('.toolbox-table'));
+ assert.ok(a.state.user&&a.state.spec);
+ assert.ok(!w.document.querySelector('input[type=password]'));
+ a.actions['toolbox-category']({dataset:{category:'fundamentals'}});
+ assert.ok(w.document.querySelector('.toolbox-table').textContent.includes('Return on equity'));
+ for(const view of ['studio','library','backtests','optimise','signals','paper','guide']){
+  w.location.hash='#'+view;await a.route();
+  assert.ok(w.document.querySelector('.review-banner'),view+' labels sample data');
+  assert.ok(w.document.querySelector('#main').textContent.length>100,view+' renders');
+ }
+ a.state.prompt='My own strategy rules';await a.runInterpret();
+ assert.ok(a.state.interpretation.summary.includes('not been interpreted'));
+ await a.run('backtest');await tick();
+ assert.equal(a.state.result.state,'completed');
+ assert.ok(w.document.querySelector('.metric-grid'));
+ assert.ok(w.document.querySelector('[data-action=tax-view]'));
+ a.actions['tax-view']({dataset:{view:'without_tax'}});
+ a.actions['result-tab']({dataset:{tab:'trades'}});
+ assert.ok(w.document.querySelector('tbody').textContent.includes('RELIANCE.NS'));
+ await a.run('optimise');await tick();
+ a.actions['result-tab']({dataset:{tab:'search'}});
+ assert.ok(w.document.querySelector('#main').textContent.includes('Training leaderboard'));
+ a.state.view='paper';a.render();assert.ok(w.document.querySelector('details').textContent.includes('Holdings'));
+ await a.actions['paper-draft']();await tick();
+ a.state.view='paper';await a.route();
+ assert.ok(a.state.paper.length>1);
+ assert.equal(requests,0,'no backend/AI/Yahoo requests');
+ assert.deepEqual(errors,[]);
+ console.log('Frontend review flows passed: toolbox, all screens, sample reports, taxes, optimisation and paper portfolios. Zero network requests.');
+ w.close();
+})().catch(e=>{console.error(e);w.close();process.exitCode=1});
